@@ -33,3 +33,12 @@ DriveTidy does not expose a permanent-delete workflow for scanned files. Health-
 - [x] Update Windows GitHub Actions to use the repository's Bun lockfile, run tests, package the installer, and publish SHA-256 checksums.
 - [ ] Run the GitHub Actions Windows build and verify installation, first launch, file picker permissions, journal persistence after restart, and uninstall behavior.
 - [ ] Configure Authenticode signing before distributing a public installer; unsigned builds may trigger Windows SmartScreen warnings.
+
+
+## Recovery inspection reliability — 0.9.0
+
+- [x] Continue destination inspection when the original parent directory was removed after a move.
+- [x] Add inspection progress and cancellation.
+- [x] Allow metadata-only batch finalization only when every destination is hash- and handle-identity-verified, with explicit confirmation.
+- [ ] Run the full Vitest suite and Windows installer workflow.
+- [ ] Validate the recovery flow against a disposable test folder before using it on a user's drive.
