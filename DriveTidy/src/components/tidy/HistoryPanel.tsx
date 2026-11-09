@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { openJournal, isUnfinished, type BatchRecord, type Journal, type OpRecord, type Unreadable } from "@/lib/journal";
 import { restoreQuarantinedBatch } from "@/lib/restore";
 import { classify, type Observation, type Classification } from "@/lib/recovery";
@@ -30,7 +31,10 @@ export function HistoryPanel() {
   const [ops, setOps] = useState<OpRecord[]>([]);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
+  const [reviewProgress, setReviewProgress] = useState<{ done: number; total: number } | null>(null);
+  const reviewAbort = useRef<AbortController | null>(null);
   const [recoveryRows, setRecoveryRows] = useState<Record<string, { observation: Observation; result: Classification }>>({});
+  const [recoverySummaries, setRecoverySummaries] = useState<Record<string, { total: number; completed: number; safeToFinalize: boolean }>>({});
   const backupInput = useRef<HTMLInputElement>(null);
   const [backupBusy, setBackupBusy] = useState(false);
 
@@ -87,7 +91,10 @@ export function HistoryPanel() {
 
   const inspectRecovery = async (batch: BatchRecord) => {
     if (!journal || reviewing) return;
+    const controller = new AbortController();
+    reviewAbort.current = controller;
     setReviewing(batch.id);
+    setReviewProgress({ done: 0, total: 0 });
     try {
       const rootRecord = await journal.getRoot(batch.rootId);
       if (!rootRecord?.handle) throw new Error("The original drive handle is unavailable. Reconnect the same drive first.");
@@ -107,76 +114,146 @@ export function HistoryPanel() {
         for (const part of path.split("/").filter(Boolean)) current = await current.getDirectoryHandle(part);
         return current;
       };
-      const readFile = async (dir: FileSystemDirectoryHandle, name: string) => {
+      const optionalDirectoryAt = async (base: FileSystemDirectoryHandle, path: string) => {
+        try { return await directoryAt(base, path); }
+        catch (error) {
+          if ((error as DOMException).name === "NotFoundError") return null;
+          throw error;
+        }
+      };
+      const readFile = async (dir: FileSystemDirectoryHandle | null, name: string) => {
+        if (!dir) return null;
         try { return await dir.getFileHandle(name); }
-        catch (e) { if ((e as DOMException).name === "NotFoundError") return null; throw e; }
+        catch (error) {
+          if ((error as DOMException).name === "NotFoundError") return null;
+          throw error;
+        }
       };
 
-      for (const op of operations) {
+      setReviewProgress({ done: 0, total: operations.length });
+      for (let index = 0; index < operations.length; index++) {
+        controller.signal.throwIfAborted();
+        const op = operations[index]!;
         let observation: Observation = { access: "ok", source: "unreadable", dest: "unreadable" };
+
+        // Missing source parent folders are normal after "remove emptied folders".
+        // Treat the source as absent, but continue inspecting the destination.
         try {
-          const sourceDir = await directoryAt(rootHandle, op.fromDir);
+          const sourceDir = await optionalDirectoryAt(rootHandle, op.fromDir);
           const sourceHandle = await readFile(sourceDir, op.fromName);
           if (!sourceHandle) observation.source = "absent";
           else {
             const sourceFile = await sourceHandle.getFile();
-            const sourceHash = await hashBlobFull(sourceFile);
+            const sourceHash = await hashBlobFull(sourceFile, controller.signal);
             observation.source = sourceHash === op.sourceSha256 ? "match" : "differs";
             if (op.sourceHandle && typeof sourceHandle.isSameEntry === "function") {
               observation.sourceSame = await sourceHandle.isSameEntry(op.sourceHandle);
             }
           }
-
-          let destinationDir: FileSystemDirectoryHandle | null = null;
-          let destinationPathKnown = false;
-          try {
-            if (typeof op.toPath === "string") {
-              destinationPathKnown = true;
-              destinationDir = await directoryAt(rootHandle, op.toPath);
-            } else if (batch.kind === "quarantine-move") {
-              destinationPathKnown = true;
-              destinationDir = await directoryAt(rootHandle, ["_DriveTidy_Quarantine", op.fromDir].filter(Boolean).join("/"));
-            } else if (!op.toDir || op.toDir === rootHandle.name) {
-              destinationDir = rootHandle;
-              destinationPathKnown = true;
-            }
-          } catch (e) {
-            if ((e as DOMException).name !== "NotFoundError") throw e;
-          }
-
-          const destinationName = op.finalName ?? op.intendedName;
-          const destinationHandle = destinationDir ? await readFile(destinationDir, destinationName) : null;
-          if (destinationHandle) {
-            const destinationFile = await destinationHandle.getFile();
-            const destinationHash = await hashBlobFull(destinationFile);
-            observation.dest = destinationHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
-            if (op.finalHandle && typeof destinationHandle.isSameEntry === "function") {
-              observation.destSame = await destinationHandle.isSameEntry(op.finalHandle);
-            }
-          } else if (op.finalHandle) {
-            // A stored handle can prove the bytes still exist, but not their current path.
-            const finalFile = await op.finalHandle.getFile();
-            const finalHash = await hashBlobFull(finalFile);
-            observation.dest = finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
-            observation.destSame = false;
-          } else {
-            observation.dest = destinationPathKnown ? "absent" : "unreadable";
-          }
-        } catch (e) {
-          if ((e as DOMException).name === "NotAllowedError" || (e as DOMException).name === "SecurityError") {
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          if (["NotAllowedError", "SecurityError"].includes((error as DOMException).name)) {
             observation = { access: "missing", source: "unreadable", dest: "unreadable" };
+          } else {
+            observation.source = "unreadable";
           }
         }
+
+        if (observation.access !== "missing") {
+          try {
+            let destinationPathKnown = false;
+            let destinationPath = "";
+            if (typeof op.toPath === "string") {
+              destinationPathKnown = true;
+              destinationPath = op.toPath;
+            } else if (batch.kind === "quarantine-move") {
+              destinationPathKnown = true;
+              destinationPath = ["_DriveTidy_Quarantine", op.fromDir].filter(Boolean).join("/");
+            } else if (!op.toDir || op.toDir === rootHandle.name) {
+              destinationPathKnown = true;
+              destinationPath = "";
+            }
+            const destinationDir = destinationPathKnown
+              ? await optionalDirectoryAt(rootHandle, destinationPath)
+              : null;
+            const destinationName = op.finalName ?? op.intendedName;
+            const destinationHandle = await readFile(destinationDir, destinationName);
+            if (destinationHandle) {
+              const destinationFile = await destinationHandle.getFile();
+              const destinationHash = await hashBlobFull(destinationFile, controller.signal);
+              observation.dest = destinationHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
+              if (op.finalHandle && typeof destinationHandle.isSameEntry === "function") {
+                observation.destSame = await destinationHandle.isSameEntry(op.finalHandle);
+              }
+            } else if (op.finalHandle) {
+              // A stored handle can prove the bytes still exist, but not their current path.
+              const finalFile = await op.finalHandle.getFile();
+              const finalHash = await hashBlobFull(finalFile, controller.signal);
+              observation.dest = finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
+              observation.destSame = false;
+            } else {
+              observation.dest = destinationPathKnown ? "absent" : "unreadable";
+            }
+          } catch (error) {
+            if (controller.signal.aborted) throw error;
+            if (["NotAllowedError", "SecurityError"].includes((error as DOMException).name)) {
+              observation = { ...observation, access: "missing", dest: "unreadable" };
+            } else {
+              observation.dest = "unreadable";
+            }
+          }
+        }
+
         inspected[op.id] = { observation, result: classify(op.state, observation) };
+        setReviewProgress({ done: index + 1, total: operations.length });
       }
       setRecoveryRows((current) => ({ ...current, ...inspected }));
       setOpen(batch.id);
       setOps(operations);
-      toast.success(`Inspected ${operations.length} journaled file operation${operations.length === 1 ? "" : "s"}. No files were changed.`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      const inspectedRows = Object.values(inspected) as Array<{ observation: Observation; result: Classification }>;
+      const completed = inspectedRows.filter((row) => row.result.outcome === "completed" && row.observation.destSame === true).length;
+      const attention = operations.length - completed;
+      setRecoverySummaries((current) => ({
+        ...current,
+        [batch.id]: {
+          total: operations.length,
+          completed,
+          safeToFinalize: operations.length > 0 && completed === operations.length,
+        },
+      }));
+      toast.success(`Inspected ${operations.length} journaled operations: ${completed} identity-verified complete, ${attention} needing review. No files were changed.`);
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        toast.info("Recovery inspection cancelled. No files were changed.");
+      } else {
+        toast.error(error instanceof Error ? error.message : String(error));
+      }
     } finally {
+      reviewAbort.current = null;
+      setReviewProgress(null);
       setReviewing(null);
+    }
+  };
+
+  const finalizeRecoveredBatch = async (batch: BatchRecord) => {
+    if (!journal) return;
+    const summary = recoverySummaries[batch.id];
+    if (!summary?.safeToFinalize || summary.total !== summary.completed) {
+      toast.error("This batch is not fully identity-verified. Keep it unfinished and review the remaining entries.");
+      return;
+    }
+    if (!confirm(`Mark "${batch.title}" as completed in DriveTidy history? All ${summary.total} recorded destinations were verified against their stored file identities and hashes. This changes journal metadata only; it does not change files.`)) return;
+    try {
+      await journal.putBatch({
+        ...batch,
+        status: "completed",
+        updatedAt: Date.now(),
+        counts: { ...batch.counts, completed: summary.completed, failed: Number(batch.counts.failed ?? 0) },
+      });
+      await reload();
+      toast.success("History record finalized. No files were changed.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -242,6 +319,16 @@ export function HistoryPanel() {
           <Button variant="outline" size="sm" onClick={() => setShowDismissed((v) => !v)}>{showDismissed ? "Hide dismissed" : "Show dismissed"}</Button>
         </div>
       </div>
+      {reviewing && reviewProgress && (
+        <div className="rounded-md border border-border bg-card p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span>Inspecting recovery records: {reviewProgress.done.toLocaleString()} / {reviewProgress.total.toLocaleString()}</span>
+            <Button size="sm" variant="outline" onClick={() => reviewAbort.current?.abort()}>Cancel inspection</Button>
+          </div>
+          <Progress value={reviewProgress.total ? (reviewProgress.done / reviewProgress.total) * 100 : 0} />
+          <p className="text-xs text-muted-foreground">This is a read-only check. File contents are never moved, renamed or deleted during inspection. Large files can take longer because their contents are verified.</p>
+        </div>
+      )}
       {visible.length === 0 && <p className="text-sm text-muted-foreground">No recorded operations yet.</p>}
       {visible.map((r) =>
         "unreadable" in r ? (
@@ -258,6 +345,11 @@ export function HistoryPanel() {
               <span className="text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span>
               <div className="ml-auto flex gap-2">
                 <Button size="sm" variant="ghost" onClick={() => toggle(r.id)}>{open === r.id ? "Hide files" : "Files"}</Button>
+                {isUnfinished(r) && recoverySummaries[r.id]?.safeToFinalize && (
+                  <Button size="sm" variant="outline" onClick={() => finalizeRecoveredBatch(r)}>
+                    Finalize verified batch
+                  </Button>
+                )}
                 {isUnfinished(r) && !r.importedAt && (
                   <Button size="sm" variant="outline" disabled={!!reviewing} onClick={() => inspectRecovery(r)}>
                     {reviewing === r.id ? "Inspecting…" : "Review recovery"}
