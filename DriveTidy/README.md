@@ -48,22 +48,24 @@ Windows runner; see [LOCAL_SETUP.md](LOCAL_SETUP.md) for instructions.
 bun install
 bun run dev
 ```
-
 \n\n## Restore quarantined files\n\nOpen **History**, find a completed **Quarantine verified duplicates** batch, and choose **Restore files**. DriveTidy verifies each quarantined file against its recorded SHA-256 fingerprint and returns it to its original folder only when that destination is available. DriveTidy checks for occupied destinations and skips conflicts; the browser file API cannot guarantee an atomic no-replace move against simultaneous external changes. Missing folders are also skipped and reported. Restores are recorded as separate history operations. The journal is not a backup, so keep independent backups of important data.\n\n\n## Interrupted operation review\n\nIf DriveTidy closes during a move, reopen the same drive and open **History**. Choose **Review recovery** on an unfinished batch. The review checks the recorded source and any reliably identifiable destination against their SHA-256 fingerprints and labels each step as not started, completed, probable completion, conflict, or needing manual review. Where the journal did not save a full nested destination path, DriveTidy deliberately marks the destination as unverified instead of guessing. This inspection is read-only: it does not move, delete, rename, or overwrite files. A probable completion means the file contents match but the destination's identity or exact location could not be fully confirmed. Follow the suggested next step only after checking the displayed paths in File Explorer.\n
 
 ### Recovery path safety
 
 New journal entries record the full destination path relative to the selected drive, not only the destination folder name. Recovery review uses that path to inspect the exact destination. For an interrupted move, DriveTidy offers **Confirm this move** only when the original path is absent, the destination SHA-256 matches the recorded content, and the destination handle matches the handle saved by the journal. This confirmation updates history only; it does not move, rename, or delete files. Older records without a full path remain subject to conservative legacy inspection.
 
+
 ### Health-check safety
 
 Problem and unreadable files are moved only into a journaled quarantine. The Health panel has no permanent-delete action, and the unused direct-delete helper has been removed. Review quarantined items in History and restore verified files when appropriate; occupied original paths are skipped.
+
 
 ## History backup and portability
 
 Open **History** and choose **Export backup** to download a JSON snapshot of operation history. Choose **Import backup** to bring a snapshot into another DriveTidy installation.
 
 Backups contain journal metadata and file paths, not file contents. The JSON export is not encrypted; treat it as private because names and folder paths may be sensitive. Imported records are deliberately added as **archived, read-only history**: DriveTidy assigns fresh record/root IDs, removes live filesystem handles, and does not let imported records trigger restore or recovery actions. Existing records are never overwritten. This is a history portability feature, not a file backup.
+
 
 ## Windows installer
 
@@ -72,5 +74,6 @@ The Windows installer is an x64 NSIS setup executable. Build it on Windows with
 DriveTidy's local app data when uninstalled. The desktop app uses a stable,
 loopback-only origin so its IndexedDB journal and saved directory handles remain
 available between launches. See [LOCAL_SETUP.md](LOCAL_SETUP.md).
+
 
 The Electron desktop build uses the stable, loopback-only origin `http://127.0.0.1:43821` to preserve browser storage between launches. It authenticates its local health check and stops if that port is already occupied.

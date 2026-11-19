@@ -128,7 +128,8 @@ export function CrossDriveCompare({
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             Choose additional external drives or folders, then compare them with /{root.name}.
             Google Drive and OneDrive work through folders available on this PC. Files stay local;
-            matches are verified with SHA-256. This comparison only creates a report.
+            online-only files may need to be available on this PC. Matches are verified with
+            SHA-256. This comparison only creates a report.
           </p>
         </div>
         <Button variant="outline" onClick={addSource} disabled={busy}>
