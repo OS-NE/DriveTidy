@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkOllama, nameWithOllama } from "@/lib/ollama";
 
-afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
+afterEach(() => { vi.unstubAllGlobals(); });
 const input = { dataUrl: "data:image/jpeg;base64,AA==", originalName: "IMG_1.jpg", kind: "image" as const };
 
 describe("Local Ollama provider", () => {
