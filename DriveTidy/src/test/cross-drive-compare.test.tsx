@@ -4,6 +4,7 @@ import { CrossDriveCompare } from "@/components/tidy/CrossDriveCompare";
 import type { DuplicateGroup, ScannedFile } from "@/lib/fs";
 
 const fsMocks = vi.hoisted(() => ({
+  directoryDisplayName: vi.fn((handle: FileSystemDirectoryHandle) => handle.name || "Drive root"),
   pickDirectory: vi.fn(),
   scanDirectory: vi.fn(),
   findDuplicates: vi.fn(),
@@ -12,11 +13,12 @@ const fsMocks = vi.hoisted(() => ({
 vi.mock("@/lib/fs", () => fsMocks);
 
 function directory(name: string): FileSystemDirectoryHandle {
-  return {
+  const handle = {
     name,
     kind: "directory",
-    isSameEntry: async (other: FileSystemHandle) => other?.name === name,
-  } as unknown as FileSystemDirectoryHandle;
+    isSameEntry: async (other: FileSystemHandle) => other === handle,
+  };
+  return handle as unknown as FileSystemDirectoryHandle;
 }
 
 function file(root: FileSystemDirectoryHandle, name: string, size = 8): ScannedFile {
@@ -82,5 +84,37 @@ describe("cross-drive duplicate comparison", () => {
 
     await waitFor(() => expect(fsMocks.findDuplicates).toHaveBeenCalledTimes(1));
     expect(fsMocks.findDuplicates.mock.calls[0]?.[0]).toHaveLength(1);
+  });
+
+  it("does not scan or add a location when the folder picker is cancelled", async () => {
+    fsMocks.pickDirectory.mockRejectedValue(new DOMException("cancelled", "AbortError"));
+
+    const primaryRoot = directory("Primary");
+    render(<CrossDriveCompare root={primaryRoot} files={[file(primaryRoot, "one.txt")]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Add drive or folder/i }));
+
+    await waitFor(() => expect(fsMocks.pickDirectory).toHaveBeenCalledWith("read"));
+    expect(fsMocks.scanDirectory).not.toHaveBeenCalled();
+    expect(screen.queryByText(/files from/)).not.toBeInTheDocument();
+  });
+
+  it("disambiguates selected roots that have the same display name", async () => {
+    const primaryRoot = directory("Primary");
+    const secondaryRoot = directory("Primary");
+    fsMocks.pickDirectory.mockResolvedValue(secondaryRoot);
+    fsMocks.scanDirectory.mockResolvedValue([file(secondaryRoot, "copy.txt")]);
+    fsMocks.findDuplicates.mockImplementation(async (allFiles: ScannedFile[]) => {
+      expect(allFiles.map((item) => item.path)).toEqual([
+        "Primary/original.txt",
+        "Primary (2)/copy.txt",
+      ]);
+      return [];
+    });
+
+    render(<CrossDriveCompare root={primaryRoot} files={[file(primaryRoot, "original.txt")]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Add drive or folder/i }));
+    await screen.findByText("Primary (2) · 1 files");
+    fireEvent.click(screen.getByRole("button", { name: "Compare 2 files" }));
+    await waitFor(() => expect(fsMocks.findDuplicates).toHaveBeenCalledTimes(1));
   });
 });

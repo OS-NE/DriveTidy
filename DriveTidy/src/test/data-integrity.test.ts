@@ -150,6 +150,30 @@ describe("large-file duplicate verification", () => {
   }, 60_000);
 });
 
+describe("cross-root duplicate comparison", () => {
+  it("reports renamed copies only when the bytes match across separate roots", async () => {
+    const primary = new MemDir();
+    const external = new MemDir();
+    primary.files.set("original.txt", new Uint8Array(Buffer.from("identical bytes")));
+    external.files.set("renamed-copy.txt", new Uint8Array(Buffer.from("identical bytes")));
+    external.files.set("same-size-different.txt", new Uint8Array(Buffer.from("different bytes")));
+    const primaryCopy = scanned(primary, "original.txt", "Primary/original.txt");
+    const renamedCopy = scanned(external, "renamed-copy.txt", "Secondary/renamed-copy.txt");
+    const sameSizeDifferent = scanned(external, "same-size-different.txt", "Secondary/same-size-different.txt");
+
+    const groups = await findDuplicates([primaryCopy, renamedCopy, sameSizeDifferent], () => {});
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ status: "verified" });
+    expect(groups[0]?.files.map((file) => file.path)).toEqual([
+      "Primary/original.txt",
+      "Secondary/renamed-copy.txt",
+    ]);
+    expect([...primary.files.keys()]).toEqual(["original.txt"]);
+    expect([...external.files.keys()]).toEqual(["renamed-copy.txt", "same-size-different.txt"]);
+  });
+});
+
 describe("moveFile integrity", () => {
   const data = () => new Uint8Array(9 * MB).map((_, i) => (i * 31) & 255);
 

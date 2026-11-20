@@ -28,6 +28,17 @@ export function fsEmbedded(): boolean {
   return typeof window !== "undefined" && window.self !== window.top;
 }
 
+export function isDriveRootDirectory(handle: FileSystemDirectoryHandle): boolean {
+  return handle.name.trim().length === 0;
+}
+
+export function directoryDisplayName(handle: FileSystemDirectoryHandle): string {
+  return isDriveRootDirectory(handle) ? "Drive root" : handle.name;
+}
+
+const DRIVE_ROOT_SCAN_CONFIRMATION =
+  "You selected an entire drive. The folder picker does not provide DriveTidy with its drive letter. DriveTidy will read file names and metadata during the scan; it will not change files. This may take a while. Continue?";
+
 // Only one native picker can be open at a time; repeat clicks reuse the open one
 // instead of throwing "File picker already active".
 let activePicker: Promise<FileSystemDirectoryHandle> | null = null;
@@ -40,7 +51,16 @@ export async function pickDirectory(mode: "readwrite" | "read" = "readwrite"): P
   const w = window as unknown as {
     showDirectoryPicker: (o: { mode: string; id?: string }) => Promise<FileSystemDirectoryHandle>;
   };
-  activePicker = w.showDirectoryPicker({ mode, id: mode === "read" ? "drive-tidy-compare" : "drive-tidy" });
+  activePicker = (async () => {
+    const selected = await w.showDirectoryPicker({
+      mode,
+      id: mode === "read" ? "drive-tidy-compare" : "drive-tidy",
+    });
+    if (isDriveRootDirectory(selected) && !window.confirm(DRIVE_ROOT_SCAN_CONFIRMATION)) {
+      throw new DOMException("Drive-root scan was not confirmed.", "AbortError");
+    }
+    return selected;
+  })();
   try {
     return await activePicker;
   } finally {

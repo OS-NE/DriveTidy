@@ -10,6 +10,8 @@ folder to include; for Google Drive and OneDrive, choose folders available throu
 their Windows sync clients. Online-only or provider-only files may need to be made
 available on this PC before they can be read. DriveTidy compares file contents
 locally with SHA-256 and does not connect to cloud APIs or upload file contents.
+Selecting a drive root requires confirmation before scanning; the folder handle
+does not provide DriveTidy with a drive letter to display.
 
 ## Desktop app
 

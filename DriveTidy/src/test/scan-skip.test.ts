@@ -25,4 +25,16 @@ describe("scanDirectory skips risky files", () => {
     expect(risky.some((f) => f.opened)).toBe(false);
     expect(hidden.opened).toBe(false);
   });
+
+  it("honors cancellation before opening any files", async () => {
+    const first = file("first.txt");
+    const root = dir("", [first]);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      scanDirectory(root as unknown as FileSystemDirectoryHandle, () => {}, undefined, controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(first.opened).toBe(false);
+  });
 });

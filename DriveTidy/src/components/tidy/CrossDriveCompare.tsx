@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
+  directoryDisplayName,
   findDuplicates,
   pickDirectory,
   scanDirectory,
@@ -48,6 +49,7 @@ export function CrossDriveCompare({
   }, [files, root.name, sources]);
 
   const addSource = async () => {
+    let scanStarted = false;
     try {
       const handle = await pickDirectory("read");
       for (const source of sources) {
@@ -64,14 +66,20 @@ export function CrossDriveCompare({
       setStopper(controller);
       setBusy(true);
       setScanProgress([0, ""]);
+      scanStarted = true;
       const scanned = await scanDirectory(
         handle,
         (count, path) => setScanProgress([count, path]),
         undefined,
         controller.signal,
       );
-      const sameName = 1 + sources.filter((source) => source.handle.name === handle.name).length;
-      const name = sameName > 1 ? `${handle.name} (${sameName})` : handle.name;
+      const locationName = directoryDisplayName(handle);
+      const sameName =
+        1 +
+        [root, ...sources.map((source) => source.handle)].filter(
+          (existing) => directoryDisplayName(existing) === locationName,
+        ).length;
+      const name = sameName > 1 ? `${locationName} (${sameName})` : locationName;
       setSources((current) => [
         ...current,
         { id: crypto.randomUUID(), name, handle, files: scanned },
@@ -81,7 +89,8 @@ export function CrossDriveCompare({
     } catch (error) {
       if ((error as Error).name !== "AbortError")
         toast.error(error instanceof Error ? error.message : String(error));
-      else toast("Location scan stopped. Nothing was changed.");
+      else if (scanStarted) toast("Location scan stopped. Nothing was changed.");
+      else toast("Folder selection canceled. Nothing was scanned.");
     } finally {
       setBusy(false);
       setStopper(null);
@@ -126,7 +135,7 @@ export function CrossDriveCompare({
             Compare drives and synced cloud folders
           </h3>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Choose additional external drives or folders, then compare them with /{root.name}.
+            Choose additional external drives or folders, then compare them with /{directoryDisplayName(root)}.
             Google Drive and OneDrive work through folders available on this PC. Files stay local;
             online-only files may need to be available on this PC. Matches are verified with
             SHA-256. This comparison only creates a report.

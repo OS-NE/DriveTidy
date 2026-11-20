@@ -4,7 +4,7 @@ import { HardDrive, FolderOpen, Copy, FolderTree, Sparkles, RefreshCw, ShieldChe
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { fsSupported, fsEmbedded, pickDirectory, scanDirectory, type ScannedFile } from "@/lib/fs";
+import { directoryDisplayName, fsSupported, fsEmbedded, pickDirectory, scanDirectory, type ScannedFile } from "@/lib/fs";
 import { categoryOf, formatBytes, isPoorlyNamed } from "@/lib/organize";
 import { DuplicatesPanel } from "@/components/tidy/DuplicatesPanel";
 import { HealthPanel } from "@/components/tidy/HealthPanel";
@@ -94,7 +94,7 @@ function Index() {
           <span className="font-display text-xl font-bold tracking-tight">DriveTidy</span>
           {root && (
             <div className="ml-auto flex items-center gap-2">
-              <span className="rounded bg-secondary px-2 py-1 font-mono text-xs">/{root.name}</span>
+              <span className="rounded bg-secondary px-2 py-1 font-mono text-xs">/{directoryDisplayName(root)}</span>
               <Button variant="ghost" size="sm" onClick={() => doScan(root)} disabled={!!scan}><RefreshCw className="h-4 w-4" />Rescan</Button>
               <Button variant="outline" size="sm" onClick={pick} disabled={!!scan}>Change drive</Button>
             </div>
@@ -140,7 +140,7 @@ function Index() {
           </section>
         ) : scan ? (
           <div className="mx-auto max-w-md py-20 text-center">
-            <p className="font-display text-2xl font-bold">Scanning /{root.name}</p>
+            <p className="font-display text-2xl font-bold">Scanning /{directoryDisplayName(root)}</p>
             <Progress className="mt-6 animate-pulse" value={100} />
             <p className="mt-3 font-mono text-sm">{scan.count} files</p>
             <p className="truncate font-mono text-xs text-muted-foreground">{scan.path}</p>
