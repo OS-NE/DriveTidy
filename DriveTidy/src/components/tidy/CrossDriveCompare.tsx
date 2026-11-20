@@ -41,7 +41,7 @@ export function CrossDriveCompare({
       path: `${sourceName}/${file.path}`,
     });
     return [
-      ...files.map((file) => prefix(file, "primary", root.name)),
+      ...files.map((file) => prefix(file, "primary", directoryDisplayName(root))),
       ...sources.flatMap((source) =>
         source.files.map((file) => prefix(file, source.id, source.name)),
       ),

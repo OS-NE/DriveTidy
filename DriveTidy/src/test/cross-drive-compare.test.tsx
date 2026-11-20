@@ -99,21 +99,21 @@ describe("cross-drive duplicate comparison", () => {
   });
 
   it("disambiguates selected roots that have the same display name", async () => {
-    const primaryRoot = directory("Primary");
-    const secondaryRoot = directory("Primary");
+    const primaryRoot = directory("");
+    const secondaryRoot = directory("");
     fsMocks.pickDirectory.mockResolvedValue(secondaryRoot);
     fsMocks.scanDirectory.mockResolvedValue([file(secondaryRoot, "copy.txt")]);
     fsMocks.findDuplicates.mockImplementation(async (allFiles: ScannedFile[]) => {
       expect(allFiles.map((item) => item.path)).toEqual([
-        "Primary/original.txt",
-        "Primary (2)/copy.txt",
+        "Drive root/original.txt",
+        "Drive root (2)/copy.txt",
       ]);
       return [];
     });
 
     render(<CrossDriveCompare root={primaryRoot} files={[file(primaryRoot, "original.txt")]} />);
     fireEvent.click(screen.getByRole("button", { name: /Add drive or folder/i }));
-    await screen.findByText("Primary (2) · 1 files");
+    await screen.findByText("Drive root (2) · 1 files");
     fireEvent.click(screen.getByRole("button", { name: "Compare 2 files" }));
     await waitFor(() => expect(fsMocks.findDuplicates).toHaveBeenCalledTimes(1));
   });
