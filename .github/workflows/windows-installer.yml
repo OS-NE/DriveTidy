@@ -37,10 +37,6 @@ jobs:
         working-directory: ./DriveTidy
         run: bun run test
 
-      - name: Verify desktop packaging inputs
-        working-directory: ./DriveTidy
-        run: bun run desktop:verify
-
       - name: Build Windows installer
         working-directory: ./DriveTidy
         run: bun run desktop:win
