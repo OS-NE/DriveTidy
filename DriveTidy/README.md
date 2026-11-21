@@ -55,9 +55,9 @@ Problem and unreadable files are moved only into a journaled quarantine. The Hea
 
 ## History backup and portability
 
-Open **History** and choose **Export backup** to download a JSON snapshot of operation history. Choose **Import backup** to bring a snapshot into another DriveTidy installation.
+Open **History** and choose **Export backup** to download a JSON snapshot of operation history, or use **Encrypted export** to protect it with a passphrase. Choose **Import backup** to bring either backup into another DriveTidy installation.
 
-Backups contain journal metadata and file paths, not file contents. The JSON export is not encrypted; treat it as private because names and folder paths may be sensitive. Imported records are deliberately added as **archived, read-only history**: DriveTidy assigns fresh record/root IDs, removes live filesystem handles, and does not let imported records trigger restore or recovery actions. Existing records are never overwritten. This is a history portability feature, not a file backup.
+Backups contain journal metadata and file paths, not file contents. Plain JSON exports are unencrypted; treat them as private because names and folder paths may be sensitive. Encrypted exports use PBKDF2-SHA-256 to derive an AES-256-GCM key from a passphrase of at least 12 characters. The passphrase is never saved. If it is lost, the encrypted export cannot be opened. Imported records are deliberately added as **archived, read-only history**: DriveTidy assigns fresh record/root IDs, removes live filesystem handles, and does not let imported records trigger restore or recovery actions. Existing records are never overwritten. This is a history portability feature, not a file backup.
 
 
 ## Windows installer

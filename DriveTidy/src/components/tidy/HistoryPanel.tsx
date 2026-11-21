@@ -7,6 +7,7 @@ import { openJournal, isUnfinished, type BatchRecord, type Journal, type OpRecor
 import { restoreQuarantinedBatch } from "@/lib/restore";
 import { classify, type Observation, type Classification } from "@/lib/recovery";
 import { hashBlobFull } from "@/lib/sha256";
+import { decryptJournalBackup, encryptJournalBackup, isEncryptedJournalBackup } from "@/lib/journal-crypto";
 
 type Row = BatchRecord | Unreadable;
 
@@ -37,6 +38,22 @@ export function HistoryPanel() {
   const [recoverySummaries, setRecoverySummaries] = useState<Record<string, { total: number; completed: number; safeToFinalize: boolean }>>({});
   const backupInput = useRef<HTMLInputElement>(null);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [backupMode, setBackupMode] = useState<"encrypt-export" | "encrypted-import" | null>(null);
+  const [backupPassphrase, setBackupPassphrase] = useState("");
+  const [backupPassphraseConfirm, setBackupPassphraseConfirm] = useState("");
+  const [pendingBackupFile, setPendingBackupFile] = useState<File | null>(null);
+
+  const importJson = async (json: string): Promise<boolean> => {
+    if (!journal) return false;
+    const preview = JSON.parse(json) as { batches?: unknown[]; ops?: unknown[] };
+    const batchCount = Array.isArray(preview.batches) ? preview.batches.length : 0;
+    const opCount = Array.isArray(preview.ops) ? preview.ops.length : 0;
+    if (!confirm(`Import ${batchCount} archived history records and ${opCount} file-operation entries?\n\nImported entries will be read-only history. They will not reconnect to drives or enable file recovery. Existing history will not be overwritten.`)) return false;
+    const result = await journal.importBackup(json);
+    await reload();
+    toast.success(`Imported ${result.batches} history records and ${result.operations} file operations.`);
+    return true;
+  };
 
   const exportHistory = async () => {
     if (!journal || backupBusy) return;
@@ -60,19 +77,70 @@ export function HistoryPanel() {
     }
   };
 
+  const exportEncryptedHistory = async () => {
+    if (!journal || backupBusy || backupPassphrase.length < 12 || backupPassphrase !== backupPassphraseConfirm) return;
+    setBackupBusy(true);
+    try {
+      const json = await journal.exportBackup();
+      const encrypted = await encryptJournalBackup(json, backupPassphrase);
+      const url = URL.createObjectURL(new Blob([encrypted], { type: "application/json" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `drivetidy-history-encrypted-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Encrypted history backup exported. Keep the passphrase separately; it cannot be recovered.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBackupBusy(false);
+      setBackupMode(null);
+      setBackupPassphrase("");
+      setBackupPassphraseConfirm("");
+    }
+  };
+
   const importHistory = async (file?: File) => {
     if (!journal || !file || backupBusy) return;
     setBackupBusy(true);
     try {
       if (file.size > 50 * 1024 * 1024) throw new Error("Backup is larger than the 50 MB import limit.");
       const json = await file.text();
-      const preview = JSON.parse(json) as { batches?: unknown[]; ops?: unknown[] };
-      const batchCount = Array.isArray(preview.batches) ? preview.batches.length : 0;
-      const opCount = Array.isArray(preview.ops) ? preview.ops.length : 0;
-      if (!confirm(`Import ${batchCount} archived history records and ${opCount} file-operation entries?\n\nImported entries will be read-only history. They will not reconnect to drives or enable file recovery. Existing history will not be overwritten.`)) return;
-      const result = await journal.importBackup(json);
-      await reload();
-      toast.success(`Imported ${result.batches} history records and ${result.operations} file operations.`);
+      const preview: unknown = JSON.parse(json);
+      if (isEncryptedJournalBackup(preview)) {
+        setPendingBackupFile(file);
+        setBackupPassphrase("");
+        setBackupMode("encrypted-import");
+        return;
+      }
+      const imported = await importJson(json);
+      if (imported) {
+        setBackupMode(null);
+        setBackupPassphrase("");
+        setBackupPassphraseConfirm("");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBackupBusy(false);
+      if (backupInput.current) backupInput.current.value = "";
+    }
+  };
+
+  const importEncryptedHistory = async () => {
+    if (!journal || !pendingBackupFile || backupBusy || !backupPassphrase) return;
+    setBackupBusy(true);
+    try {
+      if (pendingBackupFile.size > 70 * 1024 * 1024) throw new Error("Encrypted backup is larger than the 50 MB import limit.");
+      const json = await decryptJournalBackup(await pendingBackupFile.text(), backupPassphrase);
+      const imported = await importJson(json);
+      if (imported) {
+        setBackupMode(null);
+        setPendingBackupFile(null);
+        setBackupPassphrase("");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -314,11 +382,22 @@ export function HistoryPanel() {
             className="hidden"
             onChange={(event) => void importHistory(event.target.files?.[0])}
           />
-          <Button variant="outline" size="sm" disabled={!journal || backupBusy} onClick={exportHistory}>{backupBusy ? "Working…" : "Export backup"}</Button>
-          <Button variant="outline" size="sm" disabled={!journal || backupBusy} onClick={() => backupInput.current?.click()}>Import backup</Button>
+          <Button variant="outline" size="sm" disabled={!journal || backupBusy || backupMode !== null} onClick={exportHistory}>{backupBusy ? "Working…" : "Export backup"}</Button>
+          <Button variant="outline" size="sm" disabled={!journal || backupBusy} onClick={() => { setBackupMode(backupMode === "encrypt-export" ? null : "encrypt-export"); setBackupPassphrase(""); setBackupPassphraseConfirm(""); }}>Encrypted export</Button>
+          <Button variant="outline" size="sm" disabled={!journal || backupBusy || backupMode !== null} onClick={() => backupInput.current?.click()}>Import backup</Button>
           <Button variant="outline" size="sm" onClick={() => setShowDismissed((v) => !v)}>{showDismissed ? "Hide dismissed" : "Show dismissed"}</Button>
         </div>
       </div>
+      {backupMode && <div className="rounded-md border border-border bg-card p-3 space-y-2">
+        <p className="text-sm font-medium">{backupMode === "encrypt-export" ? "Encrypt history backup" : "Unlock encrypted history backup"}</p>
+        <p className="text-xs text-muted-foreground">{backupMode === "encrypt-export" ? "Use at least 12 characters. The passphrase is never saved; if lost, this backup cannot be opened." : "The decrypted history remains archived and read-only."}</p>
+        <input aria-label="Backup passphrase" type="password" autoComplete="new-password" value={backupPassphrase} onChange={(event) => setBackupPassphrase(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm" />
+        {backupMode === "encrypt-export" && <input aria-label="Confirm backup passphrase" type="password" autoComplete="new-password" value={backupPassphraseConfirm} onChange={(event) => setBackupPassphraseConfirm(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm" />}
+        <div className="flex gap-2">
+          <Button size="sm" disabled={backupBusy || (backupMode === "encrypt-export" ? backupPassphrase.length < 12 || backupPassphrase !== backupPassphraseConfirm : !backupPassphrase)} onClick={() => backupMode === "encrypt-export" ? void exportEncryptedHistory() : void importEncryptedHistory()}>{backupBusy ? "Working…" : backupMode === "encrypt-export" ? "Create encrypted backup" : "Decrypt and import"}</Button>
+          <Button size="sm" variant="outline" disabled={backupBusy} onClick={() => { setBackupMode(null); setPendingBackupFile(null); setBackupPassphrase(""); setBackupPassphraseConfirm(""); }}>Cancel</Button>
+        </div>
+      </div>}
       {reviewing && reviewProgress && (
         <div className="rounded-md border border-border bg-card p-3 space-y-2">
           <div className="flex items-center justify-between gap-3 text-sm">
