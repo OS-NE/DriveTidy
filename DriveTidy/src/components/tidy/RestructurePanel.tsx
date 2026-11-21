@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -12,15 +12,31 @@ import { toast } from "sonner";
 import { ArrowRight, Folder, Trash2 } from "lucide-react";
 import { ensureDir, moveFile, listEmptyFolders, removeEmptyFolder, type EmptyFolder, type ScannedFile } from "@/lib/fs";
 import { beginJournalRun, journaledMove, finishJournalRun } from "@/lib/safe-operations";
-import { targetFolder, extOf, isUnsafeFile, groupFolderPlan, type Strategy } from "@/lib/organize";
+import { targetFolder, customTargetFolder, safeRelativeFolder, extOf, isUnsafeFile, groupFolderPlan, recommendStructure, type Strategy } from "@/lib/organize";
 import { logActivity } from "@/lib/activity";
 
 interface Rule { ext: string; folder: string }
+const PROFILE_KEY = "drivetidy.restructure-profile.v1";
+function loadProfile(): { base: string; strategy: Strategy; template: string; rules: Rule[] } {
+  const fallback = { base: "Organized", strategy: "category-date" as Strategy, template: "{category}/{year}/{month}/{extension}", rules: [] as Rule[] };
+  try {
+    const value = JSON.parse(localStorage.getItem(PROFILE_KEY) ?? "null");
+    if (!value || typeof value !== "object") return fallback;
+    return {
+      base: typeof value.base === "string" ? value.base : fallback.base,
+      strategy: ["category", "type", "date", "category-date", "custom"].includes(value.strategy) ? value.strategy : fallback.strategy,
+      template: typeof value.template === "string" ? value.template : fallback.template,
+      rules: Array.isArray(value.rules) ? value.rules.filter((r): r is Rule => r && typeof r.ext === "string" && typeof r.folder === "string").slice(0, 100) : [],
+    };
+  } catch { return fallback; }
+}
 
 export function RestructurePanel({ root, files, onChanged }: { root: FileSystemDirectoryHandle; files: ScannedFile[]; onChanged: () => void }) {
-  const [strategy, setStrategy] = useState<Strategy>("category-date");
-  const [base, setBase] = useState("Organized");
-  const [rules, setRules] = useState<Rule[]>([]);
+  const [profile] = useState(loadProfile);
+  const [strategy, setStrategy] = useState<Strategy>(profile.strategy);
+  const [base, setBase] = useState(profile.base);
+  const [template, setTemplate] = useState(profile.template);
+  const [rules, setRules] = useState<Rule[]>(profile.rules);
   const [newRule, setNewRule] = useState<Rule>({ ext: "", folder: "" });
   const [progress, setProgress] = useState<number | null>(null);
   const [cleanEmptied, setCleanEmptied] = useState(true);
@@ -30,18 +46,44 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
   const stopRef = useRef<AbortController | null>(null);
   const [report, setReport] = useState<{ moved: { from: string; to: string }[]; fail: number; remaining: number } | null>(null);
 
-  const plan = useMemo(() => {
-    const b = base.trim().replace(/^\/+|\/+$/g, "");
-    return files
-      .filter((f) => !isUnsafeFile(f.name))
-      .filter((f) => !b || !f.path.startsWith(b + "/"))
-      .map((f) => {
-        const rule = rules.find((r) => r.ext.replace(".", "").toLowerCase() === extOf(f.name));
-        const folder = [b, rule ? rule.folder : targetFolder(f, strategy)].filter(Boolean).join("/");
-        return { f, folder };
-      })
-      .filter((p) => p.f.path.split("/").slice(0, -1).join("/") !== p.folder);
-  }, [files, strategy, base, rules]);
+  useEffect(() => {
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ base, strategy, template, rules })); } catch { /* preferences are optional */ }
+  }, [base, strategy, template, rules]);
+
+  const basePath = useMemo(() => {
+    try { return { path: safeRelativeFolder(base), error: "" }; }
+    catch (e) { return { path: "", error: e instanceof Error ? e.message : String(e) }; }
+  }, [base]);
+  const planResult = useMemo(() => {
+    if (basePath.error) return { items: [] as { f: ScannedFile; folder: string }[], error: basePath.error };
+    try {
+      const items = files
+        .filter((f) => !isUnsafeFile(f.name))
+        .filter((f) => !basePath.path || !f.path.startsWith(basePath.path + "/"))
+        .map((f) => {
+          const rule = rules.find((r) => r.ext.replace(/^\./, "").toLowerCase() === extOf(f.name));
+          const relative = rule ? safeRelativeFolder(rule.folder) : strategy === "custom" ? customTargetFolder(f, template) : targetFolder(f, strategy);
+          const folder = safeRelativeFolder([basePath.path, relative].filter(Boolean).join("/"));
+          return { f, folder };
+        })
+        .filter((p) => p.f.path.split("/").slice(0, -1).join("/") !== p.folder);
+      return { items, error: "" };
+    } catch (e) {
+      return { items: [] as { f: ScannedFile; folder: string }[], error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [files, strategy, basePath, rules, template]);
+  const plan = planResult.items;
+  const recommendation = useMemo(() => recommendStructure(files), [files]);
+  const addRule = () => {
+    const ext = newRule.ext.trim().replace(/^\./, "").toLowerCase();
+    try {
+      if (!/^[a-z0-9][a-z0-9_-]{0,19}$/.test(ext)) throw new Error("Use a file extension with letters/numbers only, such as pdf or 3mf.");
+      const folder = safeRelativeFolder(newRule.folder);
+      if (!folder) throw new Error("Enter a destination folder.");
+      setRules([...rules.filter((r) => r.ext.replace(/^\./, "").toLowerCase() !== ext), { ext, folder }]);
+      setNewRule({ ext: "", folder: "" });
+    } catch (e) { toast.error(e instanceof Error ? e.message : String(e)); }
+  };
 
   const tree = useMemo(() => groupFolderPlan(plan), [plan]);
 
@@ -84,7 +126,7 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
       try {
         // Deepest-first list of folders now empty; exclude the destination base folder.
         const srcDirs = new Set(plan.map((p) => p.f.path.split("/").slice(0, -1).join("/")).filter(Boolean));
-        const empties = (await listEmptyFolders(root, base.trim().replace(/^\/+|\/+$/g, "") || undefined))
+        const empties = (await listEmptyFolders(root, basePath.path || undefined))
           .filter((e) => cleanExisting || [...srcDirs].some((d) => d === e.path || d.startsWith(e.path + "/")));
         if (empties.length) setEmptyPreview(empties);
         else toast.info("No empty folders to remove.");
@@ -121,9 +163,15 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
               <SelectItem value="type">File type (JPG, PDF…)</SelectItem>
               <SelectItem value="date">Date (Year / Month)</SelectItem>
               <SelectItem value="category-date">Category → Year → Month</SelectItem>
+              <SelectItem value="custom">Custom folder template</SelectItem>
             </SelectContent>
           </Select>
         </div>
+        {strategy === "custom" && <div className="space-y-1 md:col-span-3">
+          <label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Folder template</label>
+          <Input value={template} onChange={(e) => setTemplate(e.target.value)} className="font-mono" placeholder="{category}/{year}/{month}/{extension}" />
+          <p className="text-xs text-muted-foreground">Tokens: <code>{"{category}"}</code>, <code>{"{extension}"}</code>, <code>{"{year}"}</code>, <code>{"{month}"}</code>, <code>{"{currentFolder}"}</code>. Separate folders with /.</p>
+        </div>}
         <div className="space-y-1">
           <label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">Into folder</label>
           <Input value={base} onChange={(e) => setBase(e.target.value)} className="font-mono" placeholder="(drive root)" />
@@ -133,7 +181,7 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
           <div className="flex gap-2">
             <Input value={newRule.ext} onChange={(e) => setNewRule({ ...newRule, ext: e.target.value })} placeholder="ext" className="w-20 font-mono" />
             <Input value={newRule.folder} onChange={(e) => setNewRule({ ...newRule, folder: e.target.value })} placeholder="Folder/Sub" className="font-mono" />
-            <Button variant="secondary" disabled={!newRule.ext || !newRule.folder} onClick={() => { setRules([...rules, newRule]); setNewRule({ ext: "", folder: "" }); }}>Add</Button>
+            <Button variant="secondary" disabled={!newRule.ext || !newRule.folder} onClick={addRule}>Add</Button>
           </div>
           <div className="flex flex-wrap gap-1 pt-1">
             {rules.map((r, i) => (
@@ -144,6 +192,13 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
           </div>
         </div>
       </div>
+
+      <p className="text-xs text-muted-foreground">Your base folder, strategy, template, and up to 100 extension rules are saved on this device.</p>
+
+      {recommendation && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <div><p className="text-sm font-semibold">Suggested layout: {recommendation.title}</p><p className="text-xs text-muted-foreground">{recommendation.detail}</p></div>
+        <Button variant="secondary" size="sm" onClick={() => setStrategy(recommendation.strategy)}>Use suggestion</Button>
+      </div>}
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <label className="flex items-center gap-2 text-sm">
@@ -157,10 +212,10 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">{plan.length}</span> files will move into <span className="font-semibold text-foreground">{tree.length}</span> folders.</p>
+        <div><p className="text-sm text-muted-foreground"><span className="font-semibold text-foreground">{plan.length}</span> files will move into <span className="font-semibold text-foreground">{tree.length}</span> folders.</p>{planResult.error && <p role="alert" className="text-xs text-destructive">Plan blocked: {planResult.error}</p>}</div>
         {progress !== null
           ? <Button variant="destructive" onClick={() => stopRef.current?.abort()}>Stop</Button>
-          : <Button onClick={apply} disabled={!plan.length}>Apply restructure</Button>}
+          : <Button onClick={apply} disabled={!plan.length || !!planResult.error}>Apply restructure</Button>}
       </div>
       {progress !== null && <Progress value={progress} />}
 

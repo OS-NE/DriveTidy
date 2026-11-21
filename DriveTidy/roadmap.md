@@ -23,6 +23,7 @@ DriveTidy does not expose a permanent-delete workflow for scanned files. Health-
 
 - [x] Phase 2 release 7: portable journal export/import with validation, fresh imported IDs, stripped filesystem handles, archived read-only imported records, and no overwrite of existing history.
 - [x] Optional encrypted journal backup with user-managed passphrase, authenticated encryption, and safe read-only import.
+- [x] Reusable restructuring preferences, safe custom folder templates, extension overrides, and scan-based layout recommendations.
 
 
 ## Windows desktop release

@@ -35,6 +35,17 @@ Windows runner; see [LOCAL_SETUP.md](LOCAL_SETUP.md) for instructions.
 - IndexedDB operation journal and explicit recovery review
 - Optional local Ollama integration; no cloud AI requirement
 
+## Custom restructuring
+
+Choose a built-in layout or **Custom folder template**. Supported tokens are
+`{category}`, `{extension}`, `{year}`, `{month}`, and `{currentFolder}`; combine
+them in any order with `/` (for example, `{category}/{year}/{month}/{extension}`).
+Extension rules override the selected layout. The base folder, layout, template,
+and up to 100 extension rules are saved locally on this device. DriveTidy previews
+the destinations and offers a layout recommendation based on the scan. Date tokens
+use last-modified metadata. Absolute paths, traversal segments, invalid Windows
+names, hidden folders, and reserved device names are rejected before any move.
+
 ## Development
 
 ```sh
