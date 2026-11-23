@@ -165,7 +165,7 @@
       "artifactName": "DriveTidy-${version}-${arch}.${ext}"
     }
   },
-  "version": "0.9.0",
+  "version": "0.9.2",
   "description": "Privacy-first desktop file organizer with cancellable, identity-verified recovery inspection.",
   "packageManager": "bun@1.3.5",
   "trustedDependencies": [

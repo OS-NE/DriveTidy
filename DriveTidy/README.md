@@ -1,8 +1,17 @@
 # DriveTidy
 
 DriveTidy is a privacy-first desktop file organizer. It scans folders locally,
-finds verified duplicates, restructures files, and can suggest descriptive names
+finds verified duplicates within one drive or across several selected drives and
+locally synced cloud folders, restructures files, and can suggest descriptive names
 using Ollama running on your own computer.
+
+The cross-drive comparison is a read-only report. Choose each external drive or
+folder to include; for Google Drive and OneDrive, choose folders available through
+their Windows sync clients. Online-only or provider-only files may need to be made
+available on this PC before they can be read. DriveTidy compares file contents
+locally with SHA-256 and does not connect to cloud APIs or upload file contents.
+Selecting a drive root requires confirmation before scanning; the folder handle
+does not provide DriveTidy with a drive letter to display.
 
 ## Desktop app
 

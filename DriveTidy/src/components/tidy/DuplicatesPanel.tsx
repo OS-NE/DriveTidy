@@ -28,6 +28,7 @@ import { logActivity } from "@/lib/activity";
 import { formatBytes } from "@/lib/organize";
 import { FilePreview } from "./FilePreview";
 import { ResultsPager, RESULTS_PAGE_SIZE } from "./ResultsPager";
+import { CrossDriveCompare } from "./CrossDriveCompare";
 
 export function DuplicatesPanel({
   root,
@@ -161,6 +162,8 @@ export function DuplicatesPanel({
 
   if (!groups) {
     return (
+      <>
+      <CrossDriveCompare root={root} files={files} />
       <div className="rounded-lg border border-dashed border-border p-10 text-center">
         <p className="text-muted-foreground">
           Compares file sizes, then fingerprints, then verifies every byte of large matches. Nothing
@@ -184,11 +187,13 @@ export function DuplicatesPanel({
           </Button>
         )}
       </div>
+      </>
     );
   }
 
   return (
     <div className="space-y-4">
+      <CrossDriveCompare root={root} files={files} />
       <div className="flex flex-wrap items-end gap-3 rounded-lg border border-border bg-card p-4">
         <div className="mr-auto">
           <div className="font-mono text-xs uppercase tracking-wider text-muted-foreground">

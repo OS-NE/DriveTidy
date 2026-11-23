@@ -9,9 +9,13 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { ArrowRight, Folder, Trash2 } from "lucide-react";
+import { ArrowRight, Folder, Sparkles, Trash2 } from "lucide-react";
 import { ensureDir, moveFile, listEmptyFolders, removeEmptyFolder, type EmptyFolder, type ScannedFile } from "@/lib/fs";
 import { beginJournalRun, journaledMove, finishJournalRun } from "@/lib/safe-operations";
+import { targetFolder, extOf, isUnsafeFile, groupFolderPlan, safeRelativeFolder, categoryOf, type Strategy } from "@/lib/organize";
+import { suggestFoldersWithOllama } from "@/lib/ollama";
+import { useProviderSettings } from "./ProviderSettings";
+import { Badge } from "@/components/ui/badge";
 import { targetFolder, customTargetFolder, safeRelativeFolder, extOf, isUnsafeFile, groupFolderPlan, recommendStructure, type Strategy } from "@/lib/organize";
 import { logActivity } from "@/lib/activity";
 
@@ -45,7 +49,76 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
   const [removing, setRemoving] = useState(false);
   const stopRef = useRef<AbortController | null>(null);
   const [report, setReport] = useState<{ moved: { from: string; to: string }[]; fail: number; remaining: number } | null>(null);
+  const aiSettings = useProviderSettings();
+  const [aiFolders, setAiFolders] = useState<Record<string, string>>({});
+  const [aiProgress, setAiProgress] = useState<[number, number] | null>(null);
+  const [aiStopper, setAiStopper] = useState<AbortController | null>(null);
 
+  const suggestLayout = async () => {
+    const candidates = files.filter((file) => !isUnsafeFile(file.name));
+    if (!candidates.length) return;
+    const controller = new AbortController();
+    setAiStopper(controller);
+    setAiProgress([0, candidates.length]);
+    setAiFolders({});
+    let accepted = 0;
+    try {
+      for (let start = 0; start < candidates.length; start += 30) {
+        controller.signal.throwIfAborted();
+        const batch = candidates.slice(start, start + 30);
+        const suggestions = await suggestFoldersWithOllama(batch.map((file) => {
+          const modified = new Date(file.lastModified);
+          return {
+            name: file.name,
+            extension: extOf(file.name) || "no extension",
+            category: categoryOf(file.name),
+            currentFolder: file.path.split("/").slice(0, -1).join("/") || "root",
+            modified: Number.isNaN(modified.getTime()) ? "unknown" : modified.toISOString().slice(0, 10),
+            size: file.size,
+          };
+        }), controller.signal);
+        const next: Record<string, string> = {};
+        for (const suggestion of suggestions) {
+          const file = batch[suggestion.index];
+          if (!file) continue;
+          try {
+            const safe = safeRelativeFolder(suggestion.folder);
+            if (safe) next[file.id] = safe;
+          } catch { /* Unsafe model output is excluded from the move plan. */ }
+        }
+        accepted += Object.keys(next).length;
+        setAiFolders((current) => ({ ...current, ...next }));
+        setAiProgress([Math.min(start + batch.length, candidates.length), candidates.length]);
+      }
+      aiSettings.updateStatus({ state: "ready", message: "Connected · local AI folder suggestions ready" });
+      if (accepted < candidates.length) toast(`Local AI suggested folders for ${accepted} of ${candidates.length} files. Review the plan; remaining files use the selected rule.`);
+      else toast.success(`Local AI suggested folders for ${accepted} files. Review the plan before applying.`);
+    } catch (error) {
+      if ((error as Error).name === "AbortError") toast("Folder suggestions stopped. No files were moved.");
+      else {
+        const message = error instanceof Error ? error.message : String(error);
+        aiSettings.updateStatus({ state: message.toLowerCase().includes("model missing") ? "missing" : "error", message });
+        toast.error(message);
+      }
+    } finally {
+      setAiProgress(null);
+      setAiStopper(null);
+    }
+  };
+
+  const plan = useMemo(() => {
+    const b = base.trim().replace(/^\/+|\/+$/g, "");
+    return files
+      .filter((f) => !isUnsafeFile(f.name))
+      .filter((f) => !b || !f.path.startsWith(b + "/"))
+      .map((f) => {
+        const rule = rules.find((r) => r.ext.replace(".", "").toLowerCase() === extOf(f.name));
+        const suggested = aiFolders[f.id];
+        const folder = [b, rule ? rule.folder : suggested ?? targetFolder(f, strategy)].filter(Boolean).join("/");
+        return { f, folder };
+      })
+      .filter((p) => p.f.path.split("/").slice(0, -1).join("/") !== p.folder);
+  }, [files, strategy, base, rules, aiFolders]);
   useEffect(() => {
     try { localStorage.setItem(PROFILE_KEY, JSON.stringify({ base, strategy, template, rules })); } catch { /* preferences are optional */ }
   }, [base, strategy, template, rules]);
@@ -193,6 +266,21 @@ export function RestructurePanel({ root, files, onChanged }: { root: FileSystemD
         </div>
       </div>
 
+      <section className="space-y-3 rounded-lg border border-primary/25 bg-primary/[0.04] p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="mr-auto">
+            <div className="flex items-center gap-2 font-semibold"><Sparkles className="h-4 w-4 text-primary" />Local AI folder suggestions</div>
+            <p className="mt-1 text-xs text-muted-foreground">Uses Ollama on this PC with filenames and basic metadata only. File contents are not read. Review the plan below; nothing moves until you apply it.</p>
+          </div>
+          <Badge variant={aiSettings.statuses.ollama?.state === "ready" ? "default" : "secondary"}>{aiSettings.checking.ollama ? "Checking local AI…" : aiSettings.statuses.ollama?.message ?? "Checking local AI…"}</Badge>
+          <Button variant="secondary" onClick={() => void suggestLayout()} disabled={!!aiProgress || aiSettings.checking.ollama || !aiSettings.statuses.ollama || ["missing", "invalid", "denied"].includes(aiSettings.statuses.ollama.state) || !files.length}><Sparkles className="h-4 w-4" />{Object.keys(aiFolders).length ? "Refresh AI suggestions" : "Suggest folder layout"}</Button>
+          {Object.keys(aiFolders).length > 0 && <Button variant="ghost" onClick={() => setAiFolders({})} disabled={!!aiProgress}>Clear AI suggestions</Button>}
+          {aiProgress && <Button variant="destructive" onClick={() => aiStopper?.abort()}>Stop suggestions</Button>}
+        </div>
+        {aiProgress && <div className="space-y-1"><Progress value={(aiProgress[0] / Math.max(1, aiProgress[1])) * 100} /><p className="font-mono text-xs text-muted-foreground">Suggesting folders for {aiProgress[0]} / {aiProgress[1]} files</p></div>}
+        {Object.keys(aiFolders).length > 0 && <p className="text-xs text-primary">AI suggestions are active for {Object.keys(aiFolders).length} files. Extension rules still take priority. Review each destination in the plan before applying.</p>}
+        {!aiSettings.checking.ollama && aiSettings.statuses.ollama && aiSettings.statuses.ollama.state !== "ready" && <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void aiSettings.verifyProvider()}>Check local AI connection</Button>}
+      </section>
       <p className="text-xs text-muted-foreground">Your base folder, strategy, template, and up to 100 extension rules are saved on this device.</p>
 
       {recommendation && <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">

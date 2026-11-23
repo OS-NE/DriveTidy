@@ -1,4 +1,4 @@
-# Windows installer notes — DriveTidy 0.8.0
+# Windows installer notes — DriveTidy 0.9.2
 
 - Windows x64 NSIS installer with DriveTidy branding.
 - Per-user install by default; user can choose an installation directory.
@@ -7,6 +7,8 @@
 - Preflight verifies Nitro server output, public assets, Electron entry, and icon.
 - GitHub Actions uses Bun and exact-pinned Electron packaging tools. On the first run it refreshes `bun.lock` to include the desktop dependencies and uploads that lockfile as a separate artifact; commit that artifact before the next release build for a fully locked dependency graph.
 - Workflow runs tests, builds, packages, generates a SHA-256 checksum, and uploads both.
+- Duplicate comparison can include multiple selected drives and locally synced cloud folders. The cross-drive comparison is report-only and verifies file contents locally; cloud API access is not used.
+- Selecting a drive root requires confirmation before scanning; the app labels it as `Drive root` because the folder handle does not expose a drive letter.
 - Tag pushes (`v*`) also publish a GitHub Release with the `.exe` attached.
 - The desktop server binds to `127.0.0.1:43821`; a per-launch token protects its
   health check. A busy port causes a visible startup error rather than fallback to
