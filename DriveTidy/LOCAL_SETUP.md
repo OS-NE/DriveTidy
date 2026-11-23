@@ -73,7 +73,7 @@ Safety note: Health checks quarantine problem files rather than permanently dele
 
 ### Exporting and importing operation history
 
-In the History panel, use **Export backup** to save a JSON journal snapshot, or **Import backup** to load one. Imported entries are archived, read-only records and cannot authorize changes to files. The export includes paths and operation metadata but never file contents; the JSON export is not encrypted, so store it securely.
+In the History panel, use **Export backup** for a portable JSON journal snapshot, or **Encrypted export** to protect the snapshot with a passphrase. Import accepts either format. Encrypted backups use PBKDF2-SHA-256 and AES-256-GCM; choose at least 12 characters and keep the passphrase separately because it cannot be recovered. Backups contain paths and operation metadata but never file contents. Imported entries are archived, read-only records and cannot authorize changes to files.
 
 
 ### Windows installer and persistent desktop storage

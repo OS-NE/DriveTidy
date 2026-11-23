@@ -23,7 +23,78 @@ export function categoryOf(name: string): Category {
   return "Other";
 }
 
-export type Strategy = "category" | "type" | "date" | "category-date";
+export type Strategy = "category" | "type" | "date" | "category-date" | "custom";
+export type BuiltInStrategy = Exclude<Strategy, "custom">;
+export type CustomFolderToken = "category" | "extension" | "year" | "month" | "currentFolder";
+
+const CUSTOM_FOLDER_TOKENS = new Set<CustomFolderToken>(["category", "extension", "year", "month", "currentFolder"]);
+
+/** Validate a relative folder path before passing it to the filesystem API. */
+export function safeRelativeFolder(path: string): string {
+  const portable = path.trim().replace(/\\/g, "/");
+  if (portable.startsWith("/") || /^[a-z]:/i.test(portable)) {
+    throw new Error("Folder paths must be relative to the selected folder.");
+  }
+  const normalized = portable.replace(/\/+$/g, "");
+  if (!normalized) return "";
+  if (normalized.length > 1024) {
+    throw new Error("Folder paths must be relative and no longer than 1024 characters.");
+  }
+  const segments = normalized.split("/");
+  for (const segment of segments) {
+    if (!segment || segment === "." || segment === "..") throw new Error("Folder paths cannot contain empty, . or .. segments.");
+    if (segment.startsWith(".") || segment.startsWith("$")) throw new Error("Folder paths cannot create hidden or system-style folders.");
+    // eslint-disable-next-line no-control-regex
+    if (/[<>:"|?*\u0000-\u001f]/.test(segment) || /[. ]$/.test(segment)) {
+      throw new Error(`Folder name "${segment}" contains characters Windows cannot safely store.`);
+    }
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment)) {
+      throw new Error(`Folder name "${segment}" is reserved on Windows.`);
+    }
+    if (segment.length > 255) throw new Error("A folder name cannot exceed 255 characters.");
+  }
+  return segments.join("/");
+}
+
+/** Expand a user template and validate its result. Unknown tokens fail closed. */
+export function customTargetFolder(f: PlanInput, template: string): string {
+  const d = new Date(f.lastModified);
+  const values: Record<CustomFolderToken, string> = {
+    category: categoryOf(f.name),
+    extension: extOf(f.name) || "no-extension",
+    year: Number.isFinite(d.getTime()) ? String(d.getFullYear()) : "unknown-date",
+    month: Number.isFinite(d.getTime()) ? String(d.getMonth() + 1).padStart(2, "0") : "unknown-date",
+    currentFolder: f.path.split("/").slice(0, -1).join("/") || "root",
+  };
+  const expanded = template.replace(/\{([^{}]+)\}/g, (_match, token: string) => {
+    if (!CUSTOM_FOLDER_TOKENS.has(token as CustomFolderToken)) throw new Error(`Unknown folder template token: {${token}}.`);
+    return values[token as CustomFolderToken];
+  });
+  if (/[{}]/.test(expanded)) throw new Error("Folder template has an unclosed token.");
+  return safeRelativeFolder(expanded);
+}
+
+export interface StructureRecommendation {
+  title: string;
+  detail: string;
+  strategy: Strategy;
+}
+
+/** Offer a simple, explainable starting point from the selected file metadata. */
+export function recommendStructure(files: PlanInput[]): StructureRecommendation | null {
+  const eligible = files.filter((f) => !isUnsafeFile(f.name));
+  if (eligible.length < 5) return null;
+  const rootFiles = eligible.filter((f) => !f.path.includes("/")).length;
+  const categories = new Set(eligible.map((f) => categoryOf(f.name)));
+  const dated = eligible.filter((f) => Number.isFinite(new Date(f.lastModified).getTime()) && f.lastModified > 0).length;
+  if (dated / eligible.length >= 0.9 && categories.size >= 2) {
+    return { title: "Category → year → month", detail: `${categories.size} file categories and usable modified dates across ${eligible.length} files. Dates use each file’s last-modified metadata.`, strategy: "category-date" };
+  }
+  if (rootFiles / eligible.length >= 0.6) {
+    return { title: "Sort into category folders", detail: `${Math.round((rootFiles / eligible.length) * 100)}% of eligible files are currently at the selected folder’s root.`, strategy: "category" };
+  }
+  return { title: "Sort by file type", detail: `The scan contains ${categories.size} categories; grouping by extension can make a mixed collection easier to browse.`, strategy: "type" };
+}
 
 /** Group in linear time without repeatedly copying every preceding file. */
 export function groupFolderPlan<T>(plan: { f: T; folder: string }[]): [string, T[]][] {
@@ -42,7 +113,7 @@ export interface PlanInput {
   lastModified: number;
 }
 
-export function targetFolder(f: PlanInput, strategy: Strategy): string {
+export function targetFolder(f: PlanInput, strategy: BuiltInStrategy): string {
   const d = new Date(f.lastModified);
   const y = String(d.getFullYear());
   const m = String(d.getMonth() + 1).padStart(2, "0");
