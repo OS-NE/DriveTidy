@@ -12,8 +12,14 @@ import {
   type Unreadable,
 } from "@/lib/journal";
 import { restoreQuarantinedBatch } from "@/lib/restore";
-import { classify, type Observation, type Classification } from "@/lib/recovery";
-import { hashBlobFull } from "@/lib/sha256";
+import type { Observation, Classification } from "@/lib/recovery";
+import {
+  createInspector,
+  outcomeTone,
+  summarize,
+  type InspectionSummary,
+  type Tone,
+} from "@/lib/inspect";
 import {
   decryptJournalBackup,
   encryptJournalBackup,
@@ -47,6 +53,73 @@ export function useJournalBatches() {
   return { journal, rows, error, reload };
 }
 
+const TONE_BADGE: Record<Tone, string> = {
+  good: "border-transparent bg-emerald-600/15 text-emerald-700 dark:text-emerald-400",
+  info: "border-transparent bg-sky-600/15 text-sky-700 dark:text-sky-400",
+  warn: "border-transparent bg-amber-500/20 text-amber-800 dark:text-amber-300",
+  bad: "border-transparent bg-destructive/15 text-destructive",
+};
+const TONE_EDGE: Record<Tone, string> = {
+  good: "border-l-emerald-500",
+  info: "border-l-sky-500",
+  warn: "border-l-amber-500",
+  bad: "border-l-destructive",
+};
+const TONE_BAR: Record<Tone, string> = {
+  good: "bg-emerald-500",
+  info: "bg-sky-500",
+  warn: "bg-amber-500",
+  bad: "bg-destructive",
+};
+const TONE_LABEL: Record<Tone, string> = {
+  good: "verified complete",
+  info: "safe, not finished",
+  warn: "needs a decision",
+  bad: "needs review",
+};
+const PRESENCE_TEXT: Record<Observation["source"], string> = {
+  absent: "not found",
+  match: "matches",
+  differs: "changed",
+  unreadable: "can't read",
+};
+
+function SummaryStrip({ summary }: { summary: InspectionSummary }) {
+  const tones = ["good", "info", "warn", "bad"] as const;
+  return (
+    <div className="space-y-2" aria-label="Inspection summary">
+      <div className="flex h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+        {tones.map((tone) =>
+          summary.tones[tone] ? (
+            <div
+              key={tone}
+              className={TONE_BAR[tone]}
+              style={{ width: `${(summary.tones[tone] / summary.total) * 100}%` }}
+            />
+          ) : null,
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        {tones.map((tone) =>
+          summary.tones[tone] ? (
+            <span
+              key={tone}
+              className={`inline-flex items-center rounded-md px-2 py-0.5 font-medium ${TONE_BADGE[tone]}`}
+            >
+              {summary.tones[tone].toLocaleString()} {TONE_LABEL[tone]}
+            </span>
+          ) : null,
+        )}
+        <span className="text-muted-foreground">
+          {summary.safeToFinalize
+            ? "Every entry is identity-verified. You can finalize this record."
+            : "Finalizing stays unavailable until every entry is verified."}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function HistoryPanel() {
   const { journal, rows, error, reload } = useJournalBatches();
   const [showDismissed, setShowDismissed] = useState(false);
@@ -54,16 +127,18 @@ export function HistoryPanel() {
   const [ops, setOps] = useState<OpRecord[]>([]);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
-  const [reviewProgress, setReviewProgress] = useState<{ done: number; total: number } | null>(
-    null,
-  );
+  const [reviewProgress, setReviewProgress] = useState<{
+    done: number;
+    total: number;
+    current: string;
+  } | null>(null);
   const reviewAbort = useRef<AbortController | null>(null);
   const [recoveryRows, setRecoveryRows] = useState<
     Record<string, { observation: Observation; result: Classification }>
   >({});
-  const [recoverySummaries, setRecoverySummaries] = useState<
-    Record<string, { total: number; completed: number; safeToFinalize: boolean }>
-  >({});
+  const [recoverySummaries, setRecoverySummaries] = useState<Record<string, InspectionSummary>>(
+    {},
+  );
   const backupInput = useRef<HTMLInputElement>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMode, setBackupMode] = useState<"encrypt-export" | "encrypted-import" | null>(null);
@@ -217,7 +292,7 @@ export function HistoryPanel() {
     const controller = new AbortController();
     reviewAbort.current = controller;
     setReviewing(batch.id);
-    setReviewProgress({ done: 0, total: 0 });
+    setReviewProgress({ done: 0, total: 0, current: "" });
     try {
       const rootRecord = await journal.getRoot(batch.rootId);
       if (!rootRecord?.handle)
@@ -238,141 +313,31 @@ export function HistoryPanel() {
         );
 
       const operations = await journal.opsFor(batch.id);
+      const inspector = createInspector(rootHandle, batch, controller.signal);
       const inspected: typeof recoveryRows = {};
-      const directoryAt = async (base: FileSystemDirectoryHandle, path: string) => {
-        let current = base;
-        for (const part of path.split("/").filter(Boolean))
-          current = await current.getDirectoryHandle(part);
-        return current;
-      };
-      const optionalDirectoryAt = async (base: FileSystemDirectoryHandle, path: string) => {
-        try {
-          return await directoryAt(base, path);
-        } catch (error) {
-          if ((error as DOMException).name === "NotFoundError") return null;
-          throw error;
-        }
-      };
-      const readFile = async (dir: FileSystemDirectoryHandle | null, name: string) => {
-        if (!dir) return null;
-        try {
-          return await dir.getFileHandle(name);
-        } catch (error) {
-          if ((error as DOMException).name === "NotFoundError") return null;
-          throw error;
-        }
-      };
-
-      setReviewProgress({ done: 0, total: operations.length });
-      for (let index = 0; index < operations.length; index++) {
-        controller.signal.throwIfAborted();
+      const total = operations.length;
+      let lastPaint = 0;
+      setReviewProgress({ done: 0, total, current: "" });
+      for (let index = 0; index < total; index++) {
         const op = operations[index]!;
-        let observation: Observation = { access: "ok", source: "unreadable", dest: "unreadable" };
-
-        // Missing source parent folders are normal after "remove emptied folders".
-        // Treat the source as absent, but continue inspecting the destination.
-        try {
-          const sourceDir = await optionalDirectoryAt(rootHandle, op.fromDir);
-          const sourceHandle = await readFile(sourceDir, op.fromName);
-          if (!sourceHandle) observation.source = "absent";
-          else {
-            const sourceFile = await sourceHandle.getFile();
-            const sourceHash = await hashBlobFull(sourceFile, controller.signal);
-            observation.source = sourceHash === op.sourceSha256 ? "match" : "differs";
-            if (op.sourceHandle && typeof sourceHandle.isSameEntry === "function") {
-              observation.sourceSame = await sourceHandle.isSameEntry(op.sourceHandle);
-            }
-          }
-        } catch (error) {
-          if (controller.signal.aborted) throw error;
-          if (["NotAllowedError", "SecurityError"].includes((error as DOMException).name)) {
-            observation = { access: "missing", source: "unreadable", dest: "unreadable" };
-          } else {
-            observation.source = "unreadable";
-          }
+        inspected[op.id] = await inspector.inspect(op);
+        // Repainting per file is wasteful on big batches; update about ten times a second.
+        const now = performance.now();
+        if (now - lastPaint > 100 || index + 1 === total) {
+          lastPaint = now;
+          setReviewProgress({ done: index + 1, total, current: op.fromName });
         }
-
-        if (observation.access !== "missing") {
-          try {
-            let destinationPathKnown = false;
-            let destinationPath = "";
-            if (typeof op.toPath === "string") {
-              destinationPathKnown = true;
-              destinationPath = op.toPath;
-            } else if (batch.kind === "quarantine-move") {
-              destinationPathKnown = true;
-              destinationPath = ["_DriveTidy_Quarantine", op.fromDir].filter(Boolean).join("/");
-            } else if (!op.toDir || op.toDir === rootHandle.name) {
-              destinationPathKnown = true;
-              destinationPath = "";
-            }
-            const destinationDir = destinationPathKnown
-              ? await optionalDirectoryAt(rootHandle, destinationPath)
-              : null;
-            const destinationName = op.finalName ?? op.intendedName;
-            const destinationHandle = await readFile(destinationDir, destinationName);
-            if (destinationHandle) {
-              const destinationFile = await destinationHandle.getFile();
-              const destinationHash = await hashBlobFull(destinationFile, controller.signal);
-              observation.dest =
-                destinationHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
-              if (op.finalHandle && typeof destinationHandle.isSameEntry === "function") {
-                observation.destSame = await destinationHandle.isSameEntry(op.finalHandle);
-              }
-            } else if (op.finalHandle) {
-              // A stored handle can prove the bytes still exist, but not their current path.
-              // If the handle's file is gone, the destination is absent (not unreadable).
-              let finalFile: File | null = null;
-              try {
-                finalFile = await op.finalHandle.getFile();
-              } catch (error) {
-                if ((error as DOMException).name !== "NotFoundError") throw error;
-              }
-              if (!finalFile) {
-                observation.dest = destinationPathKnown ? "absent" : "unreadable";
-              } else {
-                const finalHash = await hashBlobFull(finalFile, controller.signal);
-                observation.dest =
-                  finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
-                observation.destSame = false;
-              }
-            } else {
-              observation.dest = destinationPathKnown ? "absent" : "unreadable";
-            }
-          } catch (error) {
-            if (controller.signal.aborted) throw error;
-            if (["NotAllowedError", "SecurityError"].includes((error as DOMException).name)) {
-              observation = { ...observation, access: "missing", dest: "unreadable" };
-            } else {
-              observation.dest = "unreadable";
-            }
-          }
-        }
-
-        inspected[op.id] = { observation, result: classify(op.state, observation) };
-        setReviewProgress({ done: index + 1, total: operations.length });
       }
       setRecoveryRows((current) => ({ ...current, ...inspected }));
       setOpen(batch.id);
       setOps(operations);
-      const inspectedRows = Object.values(inspected) as Array<{
-        observation: Observation;
-        result: Classification;
-      }>;
-      const completed = inspectedRows.filter(
-        (row) => row.result.outcome === "completed" && row.observation.destSame === true,
-      ).length;
-      const attention = operations.length - completed;
-      setRecoverySummaries((current) => ({
-        ...current,
-        [batch.id]: {
-          total: operations.length,
-          completed,
-          safeToFinalize: operations.length > 0 && completed === operations.length,
-        },
-      }));
+      const summary = summarize(Object.values(inspected), total);
+      setRecoverySummaries((current) => ({ ...current, [batch.id]: summary }));
+      const skipped = inspector.stats.sizeShortcuts;
       toast.success(
-        `Inspected ${operations.length} journaled operations: ${completed} identity-verified complete, ${attention} needing review. No files were changed.`,
+        `Inspected ${total} journaled operations: ${summary.completed} identity-verified complete, ${summary.attention} needing review.` +
+          (skipped ? ` ${skipped} changed files were spotted by size without reading them.` : "") +
+          " No files were changed.",
       );
     } catch (error) {
       if ((error as Error).name === "AbortError") {
@@ -599,11 +564,17 @@ export function HistoryPanel() {
         </div>
       )}
       {reviewing && reviewProgress && (
-        <div className="rounded-md border border-border bg-card p-3 space-y-2">
+        <div
+          className="rounded-md border border-border bg-card p-3 space-y-2"
+          role="status"
+          aria-live="polite"
+        >
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span>
-              Inspecting recovery records: {reviewProgress.done.toLocaleString()} /{" "}
+            <span className="font-medium">
+              Inspecting {reviewProgress.done.toLocaleString()} of{" "}
               {reviewProgress.total.toLocaleString()}
+              {reviewProgress.total > 0 &&
+                ` (${Math.round((reviewProgress.done / reviewProgress.total) * 100)}%)`}
             </span>
             <Button size="sm" variant="outline" onClick={() => reviewAbort.current?.abort()}>
               Cancel inspection
@@ -612,9 +583,10 @@ export function HistoryPanel() {
           <Progress
             value={reviewProgress.total ? (reviewProgress.done / reviewProgress.total) * 100 : 0}
           />
-          <p className="text-xs text-muted-foreground">
-            This is a read-only check. File contents are never moved, renamed or deleted during
-            inspection. Large files can take longer because their contents are verified.
+          <p className="truncate text-xs text-muted-foreground">
+            {reviewProgress.current ? `Last checked: ${reviewProgress.current}. ` : ""}
+            Read-only: nothing is moved, renamed or deleted. Large files take longer because their
+            contents are verified.
           </p>
         </div>
       )}
@@ -695,14 +667,23 @@ export function HistoryPanel() {
                 )}
               </div>
             </div>
+            {recoverySummaries[r.id] && isUnfinished(r) && (
+              <SummaryStrip summary={recoverySummaries[r.id]!} />
+            )}
             {open === r.id && (
               <ul className="space-y-1 text-xs">
                 {ops.length === 0 && <li className="text-muted-foreground">No files recorded.</li>}
                 {ops.map((o) => {
                   const review = recoveryRows[o.id];
+                  const tone = review ? outcomeTone(review.result.outcome) : null;
                   return (
-                    <li key={o.id} className="rounded border border-border/60 p-2">
-                      <div>
+                    <li
+                      key={o.id}
+                      className={`rounded border border-border/60 p-2 ${
+                        tone ? `border-l-4 ${TONE_EDGE[tone]}` : ""
+                      }`}
+                    >
+                      <div className="break-all">
                         <span className="font-mono">
                           {o.fromDir}/{o.fromName}
                         </span>{" "}
@@ -710,25 +691,23 @@ export function HistoryPanel() {
                         <span className="font-mono">
                           {o.toPath ?? o.toDir}/{o.finalName ?? o.intendedName}
                         </span>{" "}
-                        · {o.state}
-                        {o.error ? ` · ${o.error}` : ""}
+                        <span className="text-muted-foreground">
+                          · {o.state}
+                          {o.error ? ` · ${o.error}` : ""}
+                        </span>
                       </div>
-                      {review && (
+                      {review && tone && (
                         <div className="mt-1 space-y-1">
-                          <Badge
-                            variant={
-                              ["needs-review", "conflict", "waiting-for-access"].includes(
-                                review.result.outcome,
-                              )
-                                ? "destructive"
-                                : "secondary"
-                            }
-                          >
-                            {review.result.label}
-                          </Badge>
-                          <div className="text-muted-foreground">
-                            Source: {review.observation.source} · Destination:{" "}
-                            {review.observation.dest}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={TONE_BADGE[tone]}>{review.result.label}</Badge>
+                            <span className="text-muted-foreground">
+                              Original {PRESENCE_TEXT[review.observation.source]} · Destination{" "}
+                              {PRESENCE_TEXT[review.observation.dest]}
+                              {review.observation.dest === "match" &&
+                                (review.observation.destSame
+                                  ? " (same file)"
+                                  : " (identity unconfirmed)")}
+                            </span>
                           </div>
                           {review.result.actions.length > 0 && (
                             <div className="text-muted-foreground">
