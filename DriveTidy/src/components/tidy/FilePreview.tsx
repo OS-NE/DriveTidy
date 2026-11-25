@@ -15,22 +15,28 @@ export function FilePreview({ file, className = "" }: { file: ScannedFile; class
     let u: string | undefined;
     let alive = true;
     setUrl(undefined);
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry?.isIntersecting) return;
-      observer.disconnect();
-      previewQueue = previewQueue.catch(() => {}).then(async () => {
-        if (!alive) return;
-        if (cat === "Images") {
-          const preview = await thumbnailDataUrl(file, 192);
-          if (alive) setUrl(preview);
-        } else {
-          const f = await file.handle.getFile();
-          if (!alive) return;
-          u = URL.createObjectURL(f);
-          setUrl(u);
-        }
-      }).catch(() => {});
-    }, { rootMargin: "100px" });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        observer.disconnect();
+        previewQueue = previewQueue
+          .catch(() => {})
+          .then(async () => {
+            if (!alive) return;
+            if (cat === "Images") {
+              const preview = await thumbnailDataUrl(file, 192);
+              if (alive) setUrl(preview);
+            } else {
+              const f = await file.handle.getFile();
+              if (!alive) return;
+              u = URL.createObjectURL(f);
+              setUrl(u);
+            }
+          })
+          .catch(() => {});
+      },
+      { rootMargin: "100px" },
+    );
     if (ref.current) observer.observe(ref.current);
     return () => {
       alive = false;
@@ -40,9 +46,28 @@ export function FilePreview({ file, className = "" }: { file: ScannedFile; class
   }, [file, cat]);
 
   const box = `relative overflow-hidden rounded-md border border-border bg-muted ${className}`;
-  if (cat === "Images" && url) return <div ref={ref} className={box}><img src={url} alt={file.name} className="h-full w-full object-cover" loading="lazy" /></div>;
-  if (cat === "Videos" && url) return <div ref={ref} className={box}><video src={url} className="h-full w-full object-cover" muted controls preload="none" /></div>;
-  const Icon = cat === "Documents" ? FileText : cat === "Audio" ? Music : cat === "Archives" ? Archive : cat === "3D Print" ? Box : File;
+  if (cat === "Images" && url)
+    return (
+      <div ref={ref} className={box}>
+        <img src={url} alt={file.name} className="h-full w-full object-cover" loading="lazy" />
+      </div>
+    );
+  if (cat === "Videos" && url)
+    return (
+      <div ref={ref} className={box}>
+        <video src={url} className="h-full w-full object-cover" muted controls preload="none" />
+      </div>
+    );
+  const Icon =
+    cat === "Documents"
+      ? FileText
+      : cat === "Audio"
+        ? Music
+        : cat === "Archives"
+          ? Archive
+          : cat === "3D Print"
+            ? Box
+            : File;
   return (
     <div ref={ref} className={`${box} flex items-center justify-center`}>
       <Icon className="h-8 w-8 text-muted-foreground" />
