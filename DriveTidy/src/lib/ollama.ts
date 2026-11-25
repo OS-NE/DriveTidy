@@ -3,38 +3,60 @@
 import type { ProviderStatus } from "./ai-provider";
 import { normalizeNamingUsage } from "./rename-usage";
 
-export const OLLAMA_DEFAULTS = { url: "http://localhost:11434", model: "llama3.2-vision" };
+export const OLLAMA_DEFAULTS = {
+  url: "http://localhost:11434",
+  model: "llama3.2", // text model: folder suggestions / restructuring
+  visionModel: "llama3.2-vision", // vision model: photo & video renaming
+};
 const KEY = "drivetidy.ollama";
 
-export function getOllamaConfig(): { url: string; model: string } {
+export interface OllamaConfig {
+  url: string;
+  model: string;
+  visionModel: string;
+}
+
+export function getOllamaConfig(): OllamaConfig {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
+    // Backward compatible: older configs stored one "model" used for everything.
+    const legacyModel = String(saved.model || "");
     return {
       url: String(saved.url || OLLAMA_DEFAULTS.url).replace(/\/+$/, ""),
       model: String(saved.model || OLLAMA_DEFAULTS.model),
+      visionModel: String(saved.visionModel || legacyModel || OLLAMA_DEFAULTS.visionModel),
     };
   } catch {
-    return OLLAMA_DEFAULTS;
+    return { ...OLLAMA_DEFAULTS };
   }
 }
-export function saveOllamaConfig(config: { url: string; model: string }) {
-  localStorage.setItem(KEY, JSON.stringify(config));
+export function saveOllamaConfig(config: Partial<OllamaConfig>) {
+  const current = getOllamaConfig();
+  const next: OllamaConfig = {
+    url: (config.url ?? current.url).replace(/\/+$/, ""),
+    model: config.model ?? current.model,
+    visionModel: config.visionModel ?? current.visionModel,
+  };
+  localStorage.setItem(KEY, JSON.stringify(next));
 }
 
 const unreachable = "Ollama not reachable · is it running? (see setup)";
 
 export async function checkOllama(): Promise<ProviderStatus> {
-  const { url, model } = getOllamaConfig();
+  const { url, model, visionModel } = getOllamaConfig();
   try {
     const res = await fetch(`${url}/api/tags`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) return { state: "error", message: unreachable };
     const { models = [] } = (await res.json()) as { models?: { name: string }[] };
-    const found = models.some(
-      (m) => m.name === model || m.name === `${model}:latest` || m.name.split(":")[0] === model,
-    );
-    return found
-      ? { state: "ready", message: `Local · ${model} ready · free` }
-      : { state: "missing", message: `Model missing · run: ollama pull ${model}` };
+    const has = (m: string) =>
+      models.some((x) => x.name === m || x.name === `${m}:latest` || x.name.split(":")[0] === m);
+    const missing = [model, visionModel].filter((m) => !has(m));
+    if (missing.length === 0)
+      return { state: "ready", message: `Local · text: ${model} · vision: ${visionModel} · free` };
+    return {
+      state: "missing",
+      message: `Model missing · run: ${missing.map((m) => `ollama pull ${m}`).join(" && ")}`,
+    };
   } catch {
     return { state: "error", message: unreachable };
   }
@@ -48,7 +70,7 @@ export async function nameWithOllama(data: {
   originalName: string;
   kind: "image" | "video";
 }) {
-  const { url, model } = getOllamaConfig();
+  const { url, visionModel: model } = getOllamaConfig();
   const usage = normalizeNamingUsage(undefined);
   try {
     const res = await fetch(`${url}/api/chat`, {
