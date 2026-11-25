@@ -6,17 +6,30 @@ function file(name: string) {
   return {
     kind: "file" as const,
     name,
-    get opened() { return opened; },
-    getFile: async () => { opened = true; return new File(["x"], name); },
+    get opened() {
+      return opened;
+    },
+    getFile: async () => {
+      opened = true;
+      return new File(["x"], name);
+    },
   };
 }
 function dir(name: string, children: unknown[]) {
-  return { kind: "directory" as const, name, values: async function* () { yield* children; } };
+  return {
+    kind: "directory" as const,
+    name,
+    values: async function* () {
+      yield* children;
+    },
+  };
 }
 
 describe("scanDirectory skips risky files", () => {
   it("never opens scripts, programs or markup files and keeps normal files", async () => {
-    const risky = ["tool.py", "a.js", "setup.exe", "run.bat", "m.xlsm", "x.pyc", "data.xml"].map(file);
+    const risky = ["tool.py", "a.js", "setup.exe", "run.bat", "m.xlsm", "x.pyc", "data.xml"].map(
+      file,
+    );
     const safe = [file("photo.jpg"), file("notes.pdf")];
     const hidden = file("secret.jpg");
     const root = dir("", [...risky, ...safe, dir("AppData", [hidden]), dir(".cache", [hidden])]);
@@ -33,7 +46,12 @@ describe("scanDirectory skips risky files", () => {
     controller.abort();
 
     await expect(
-      scanDirectory(root as unknown as FileSystemDirectoryHandle, () => {}, undefined, controller.signal),
+      scanDirectory(
+        root as unknown as FileSystemDirectoryHandle,
+        () => {},
+        undefined,
+        controller.signal,
+      ),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(first.opened).toBe(false);
   });

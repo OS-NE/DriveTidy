@@ -1,4 +1,5 @@
 <!-- LOVABLE:BEGIN -->
+
 > [!IMPORTANT]
 > This project is connected to [Lovable](https://lovable.dev). Avoid rewriting
 > published git history — force pushing, or rebasing/amending/squashing commits
@@ -7,9 +8,11 @@
 >
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
+
 <!-- LOVABLE:END -->
 
 # Project rules
+
 - Batch usage aggregates provider-reported tokens and naming requests only; missing usage remains unknown and token totals never masquerade as actual credit deductions.
 - Provider settings and the rename panel share connection state through a tool-scoped context, so live rechecks update both surfaces without requiring drive selection.
 - The app has no password gate and no accounts; the index route renders directly with no server loader.

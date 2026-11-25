@@ -46,10 +46,12 @@ if (!build.files?.includes("build/icon.ico")) {
 
 const electronMain = fs.readFileSync(path.join(root, "electron/main.cjs"), "utf8");
 const serverSource = fs.readFileSync(path.join(root, "src/server.ts"), "utf8");
-if (!electronMain.includes("const PORT = 43821") ||
-    !electronMain.includes("x-drivetidy-health-token") ||
-    !serverSource.includes("/__drivetidy_health") ||
-    !serverSource.includes("DRIVETIDY_HEALTH_TOKEN")) {
+if (
+  !electronMain.includes("const PORT = 43821") ||
+  !electronMain.includes("x-drivetidy-health-token") ||
+  !serverSource.includes("/__drivetidy_health") ||
+  !serverSource.includes("DRIVETIDY_HEALTH_TOKEN")
+) {
   console.error("Stable-origin authenticated local health-check configuration is incomplete.");
   process.exit(1);
 }
@@ -61,4 +63,6 @@ if (!serverEntry.trim()) {
 }
 
 console.log(`Desktop package preflight passed for DriveTidy ${pkg.version}.`);
-console.log("Found Nitro server output, public assets, Electron entry, Windows x64 NSIS config, icon, and authenticated health check.");
+console.log(
+  "Found Nitro server output, public assets, Electron entry, Windows x64 NSIS config, icon, and authenticated health check.",
+);

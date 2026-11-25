@@ -10,7 +10,9 @@ function registrationRefused(): boolean {
   const host = window.location.hostname.toLowerCase();
   const firstLabel = host.split(".")[0] ?? "";
   const onLovableInfra =
-    host.endsWith(".lovable.app") || host.endsWith(".gpt-eng.com") || host.endsWith(".gptengineer.run");
+    host.endsWith(".lovable.app") ||
+    host.endsWith(".gpt-eng.com") ||
+    host.endsWith(".gptengineer.run");
   if (onLovableInfra && PREVIEW_LABEL.test(firstLabel)) return true;
   if (host === "lovableproject.com" || host.endsWith(".lovableproject.com")) return true;
   if (host === "lovableproject-dev.com" || host.endsWith(".lovableproject-dev.com")) return true;

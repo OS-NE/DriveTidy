@@ -20,11 +20,9 @@ Recovery review is read-only except for **Confirm this move**, which updates jou
 
 DriveTidy does not expose a permanent-delete workflow for scanned files. Health-check results can only be moved into a journaled quarantine. Removing a history record never removes files. Quarantine restoration remains fingerprint-checked and skips occupied original paths.
 
-
 - [x] Phase 2 release 7: portable journal export/import with validation, fresh imported IDs, stripped filesystem handles, archived read-only imported records, and no overwrite of existing history.
 - [x] Optional encrypted journal backup with user-managed passphrase, authenticated encryption, and safe read-only import.
 - [x] Reusable restructuring preferences, safe custom folder templates, extension overrides, and scan-based layout recommendations.
-
 
 ## Windows desktop release
 
@@ -34,7 +32,6 @@ DriveTidy does not expose a permanent-delete workflow for scanned files. Health-
 - [x] Update Windows GitHub Actions to use the repository's Bun lockfile, run tests, package the installer, and publish SHA-256 checksums.
 - [ ] Run the GitHub Actions Windows build and verify installation, first launch, file picker permissions, journal persistence after restart, and uninstall behavior.
 - [ ] Configure Authenticode signing before distributing a public installer; unsigned builds may trigger Windows SmartScreen warnings.
-
 
 ## Recovery inspection reliability — 0.9.0
 

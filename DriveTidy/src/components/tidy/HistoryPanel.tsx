@@ -3,11 +3,22 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { openJournal, isUnfinished, type BatchRecord, type Journal, type OpRecord, type Unreadable } from "@/lib/journal";
+import {
+  openJournal,
+  isUnfinished,
+  type BatchRecord,
+  type Journal,
+  type OpRecord,
+  type Unreadable,
+} from "@/lib/journal";
 import { restoreQuarantinedBatch } from "@/lib/restore";
 import { classify, type Observation, type Classification } from "@/lib/recovery";
 import { hashBlobFull } from "@/lib/sha256";
-import { decryptJournalBackup, encryptJournalBackup, isEncryptedJournalBackup } from "@/lib/journal-crypto";
+import {
+  decryptJournalBackup,
+  encryptJournalBackup,
+  isEncryptedJournalBackup,
+} from "@/lib/journal-crypto";
 
 type Row = BatchRecord | Unreadable;
 
@@ -15,11 +26,22 @@ export function useJournalBatches() {
   const [journal, setJournal] = useState<Journal | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const reload = async (j = journal) => { if (j) setRows(await j.listBatches()); };
+  const reload = async (j = journal) => {
+    if (j) setRows(await j.listBatches());
+  };
   useEffect(() => {
-    if (typeof indexedDB === "undefined") { setError("History unavailable in this browser"); return; }
+    if (typeof indexedDB === "undefined") {
+      setError("History unavailable in this browser");
+      return;
+    }
     let j: Journal | undefined;
-    openJournal().then(async (x) => { j = x; setJournal(x); setRows(await x.listBatches()); }).catch((e) => setError(e.message));
+    openJournal()
+      .then(async (x) => {
+        j = x;
+        setJournal(x);
+        setRows(await x.listBatches());
+      })
+      .catch((e) => setError(e.message));
     return () => j?.close();
   }, []);
   return { journal, rows, error, reload };
@@ -32,10 +54,16 @@ export function HistoryPanel() {
   const [ops, setOps] = useState<OpRecord[]>([]);
   const [restoring, setRestoring] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState<string | null>(null);
-  const [reviewProgress, setReviewProgress] = useState<{ done: number; total: number } | null>(null);
+  const [reviewProgress, setReviewProgress] = useState<{ done: number; total: number } | null>(
+    null,
+  );
   const reviewAbort = useRef<AbortController | null>(null);
-  const [recoveryRows, setRecoveryRows] = useState<Record<string, { observation: Observation; result: Classification }>>({});
-  const [recoverySummaries, setRecoverySummaries] = useState<Record<string, { total: number; completed: number; safeToFinalize: boolean }>>({});
+  const [recoveryRows, setRecoveryRows] = useState<
+    Record<string, { observation: Observation; result: Classification }>
+  >({});
+  const [recoverySummaries, setRecoverySummaries] = useState<
+    Record<string, { total: number; completed: number; safeToFinalize: boolean }>
+  >({});
   const backupInput = useRef<HTMLInputElement>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMode, setBackupMode] = useState<"encrypt-export" | "encrypted-import" | null>(null);
@@ -48,10 +76,17 @@ export function HistoryPanel() {
     const preview = JSON.parse(json) as { batches?: unknown[]; ops?: unknown[] };
     const batchCount = Array.isArray(preview.batches) ? preview.batches.length : 0;
     const opCount = Array.isArray(preview.ops) ? preview.ops.length : 0;
-    if (!confirm(`Import ${batchCount} archived history records and ${opCount} file-operation entries?\n\nImported entries will be read-only history. They will not reconnect to drives or enable file recovery. Existing history will not be overwritten.`)) return false;
+    if (
+      !confirm(
+        `Import ${batchCount} archived history records and ${opCount} file-operation entries?\n\nImported entries will be read-only history. They will not reconnect to drives or enable file recovery. Existing history will not be overwritten.`,
+      )
+    )
+      return false;
     const result = await journal.importBackup(json);
     await reload();
-    toast.success(`Imported ${result.batches} history records and ${result.operations} file operations.`);
+    toast.success(
+      `Imported ${result.batches} history records and ${result.operations} file operations.`,
+    );
     return true;
   };
 
@@ -69,7 +104,9 @@ export function HistoryPanel() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success("History backup exported. It contains file paths and operation metadata, not file contents.");
+      toast.success(
+        "History backup exported. It contains file paths and operation metadata, not file contents.",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -78,7 +115,13 @@ export function HistoryPanel() {
   };
 
   const exportEncryptedHistory = async () => {
-    if (!journal || backupBusy || backupPassphrase.length < 12 || backupPassphrase !== backupPassphraseConfirm) return;
+    if (
+      !journal ||
+      backupBusy ||
+      backupPassphrase.length < 12 ||
+      backupPassphrase !== backupPassphraseConfirm
+    )
+      return;
     setBackupBusy(true);
     try {
       const json = await journal.exportBackup();
@@ -91,7 +134,9 @@ export function HistoryPanel() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      toast.success("Encrypted history backup exported. Keep the passphrase separately; it cannot be recovered.");
+      toast.success(
+        "Encrypted history backup exported. Keep the passphrase separately; it cannot be recovered.",
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -106,7 +151,8 @@ export function HistoryPanel() {
     if (!journal || !file || backupBusy) return;
     setBackupBusy(true);
     try {
-      if (file.size > 50 * 1024 * 1024) throw new Error("Backup is larger than the 50 MB import limit.");
+      if (file.size > 50 * 1024 * 1024)
+        throw new Error("Backup is larger than the 50 MB import limit.");
       const json = await file.text();
       const preview: unknown = JSON.parse(json);
       if (isEncryptedJournalBackup(preview)) {
@@ -133,7 +179,8 @@ export function HistoryPanel() {
     if (!journal || !pendingBackupFile || backupBusy || !backupPassphrase) return;
     setBackupBusy(true);
     try {
-      if (pendingBackupFile.size > 70 * 1024 * 1024) throw new Error("Encrypted backup is larger than the 50 MB import limit.");
+      if (pendingBackupFile.size > 70 * 1024 * 1024)
+        throw new Error("Encrypted backup is larger than the 50 MB import limit.");
       const json = await decryptJournalBackup(await pendingBackupFile.text(), backupPassphrase);
       const imported = await importJson(json);
       if (imported) {
@@ -149,12 +196,20 @@ export function HistoryPanel() {
     }
   };
 
-  if (error) return <p className="text-sm text-destructive">{error}. Scanning still works; file changes that need history are disabled.</p>;
+  if (error)
+    return (
+      <p className="text-sm text-destructive">
+        {error}. Scanning still works; file changes that need history are disabled.
+      </p>
+    );
 
-  const visible = rows.filter((r) => "unreadable" in r || showDismissed || r.visibility !== "dismissed");
+  const visible = rows.filter(
+    (r) => "unreadable" in r || showDismissed || r.visibility !== "dismissed",
+  );
   const toggle = async (id: string) => {
     if (open === id) return setOpen(null);
-    setOpen(id); setOps(journal ? await journal.opsFor(id) : []);
+    setOpen(id);
+    setOps(journal ? await journal.opsFor(id) : []);
   };
 
   const inspectRecovery = async (batch: BatchRecord) => {
@@ -165,34 +220,44 @@ export function HistoryPanel() {
     setReviewProgress({ done: 0, total: 0 });
     try {
       const rootRecord = await journal.getRoot(batch.rootId);
-      if (!rootRecord?.handle) throw new Error("The original drive handle is unavailable. Reconnect the same drive first.");
+      if (!rootRecord?.handle)
+        throw new Error(
+          "The original drive handle is unavailable. Reconnect the same drive first.",
+        );
       const rootHandle = rootRecord.handle;
       const permissionHandle = rootHandle as FileSystemDirectoryHandle & {
         queryPermission?: (descriptor: { mode: "read" }) => Promise<PermissionState>;
         requestPermission?: (descriptor: { mode: "read" }) => Promise<PermissionState>;
       };
       let permission = await permissionHandle.queryPermission?.({ mode: "read" });
-      if (permission === "prompt") permission = await permissionHandle.requestPermission?.({ mode: "read" });
-      if (permission === "denied") throw new Error("DriveTidy needs read access to inspect this drive. Reconnect it and grant permission.");
+      if (permission === "prompt")
+        permission = await permissionHandle.requestPermission?.({ mode: "read" });
+      if (permission === "denied")
+        throw new Error(
+          "DriveTidy needs read access to inspect this drive. Reconnect it and grant permission.",
+        );
 
       const operations = await journal.opsFor(batch.id);
       const inspected: typeof recoveryRows = {};
       const directoryAt = async (base: FileSystemDirectoryHandle, path: string) => {
         let current = base;
-        for (const part of path.split("/").filter(Boolean)) current = await current.getDirectoryHandle(part);
+        for (const part of path.split("/").filter(Boolean))
+          current = await current.getDirectoryHandle(part);
         return current;
       };
       const optionalDirectoryAt = async (base: FileSystemDirectoryHandle, path: string) => {
-        try { return await directoryAt(base, path); }
-        catch (error) {
+        try {
+          return await directoryAt(base, path);
+        } catch (error) {
           if ((error as DOMException).name === "NotFoundError") return null;
           throw error;
         }
       };
       const readFile = async (dir: FileSystemDirectoryHandle | null, name: string) => {
         if (!dir) return null;
-        try { return await dir.getFileHandle(name); }
-        catch (error) {
+        try {
+          return await dir.getFileHandle(name);
+        } catch (error) {
           if ((error as DOMException).name === "NotFoundError") return null;
           throw error;
         }
@@ -249,7 +314,8 @@ export function HistoryPanel() {
             if (destinationHandle) {
               const destinationFile = await destinationHandle.getFile();
               const destinationHash = await hashBlobFull(destinationFile, controller.signal);
-              observation.dest = destinationHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
+              observation.dest =
+                destinationHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
               if (op.finalHandle && typeof destinationHandle.isSameEntry === "function") {
                 observation.destSame = await destinationHandle.isSameEntry(op.finalHandle);
               }
@@ -257,7 +323,8 @@ export function HistoryPanel() {
               // A stored handle can prove the bytes still exist, but not their current path.
               const finalFile = await op.finalHandle.getFile();
               const finalHash = await hashBlobFull(finalFile, controller.signal);
-              observation.dest = finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
+              observation.dest =
+                finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
               observation.destSame = false;
             } else {
               observation.dest = destinationPathKnown ? "absent" : "unreadable";
@@ -278,8 +345,13 @@ export function HistoryPanel() {
       setRecoveryRows((current) => ({ ...current, ...inspected }));
       setOpen(batch.id);
       setOps(operations);
-      const inspectedRows = Object.values(inspected) as Array<{ observation: Observation; result: Classification }>;
-      const completed = inspectedRows.filter((row) => row.result.outcome === "completed" && row.observation.destSame === true).length;
+      const inspectedRows = Object.values(inspected) as Array<{
+        observation: Observation;
+        result: Classification;
+      }>;
+      const completed = inspectedRows.filter(
+        (row) => row.result.outcome === "completed" && row.observation.destSame === true,
+      ).length;
       const attention = operations.length - completed;
       setRecoverySummaries((current) => ({
         ...current,
@@ -289,7 +361,9 @@ export function HistoryPanel() {
           safeToFinalize: operations.length > 0 && completed === operations.length,
         },
       }));
-      toast.success(`Inspected ${operations.length} journaled operations: ${completed} identity-verified complete, ${attention} needing review. No files were changed.`);
+      toast.success(
+        `Inspected ${operations.length} journaled operations: ${completed} identity-verified complete, ${attention} needing review. No files were changed.`,
+      );
     } catch (error) {
       if ((error as Error).name === "AbortError") {
         toast.info("Recovery inspection cancelled. No files were changed.");
@@ -307,16 +381,27 @@ export function HistoryPanel() {
     if (!journal) return;
     const summary = recoverySummaries[batch.id];
     if (!summary?.safeToFinalize || summary.total !== summary.completed) {
-      toast.error("This batch is not fully identity-verified. Keep it unfinished and review the remaining entries.");
+      toast.error(
+        "This batch is not fully identity-verified. Keep it unfinished and review the remaining entries.",
+      );
       return;
     }
-    if (!confirm(`Mark "${batch.title}" as completed in DriveTidy history? All ${summary.total} recorded destinations were verified against their stored file identities and hashes. This changes journal metadata only; it does not change files.`)) return;
+    if (
+      !confirm(
+        `Mark "${batch.title}" as completed in DriveTidy history? All ${summary.total} recorded destinations were verified against their stored file identities and hashes. This changes journal metadata only; it does not change files.`,
+      )
+    )
+      return;
     try {
       await journal.putBatch({
         ...batch,
         status: "completed",
         updatedAt: Date.now(),
-        counts: { ...batch.counts, completed: summary.completed, failed: Number(batch.counts.failed ?? 0) },
+        counts: {
+          ...batch.counts,
+          completed: summary.completed,
+          failed: Number(batch.counts.failed ?? 0),
+        },
       });
       await reload();
       toast.success("History record finalized. No files were changed.");
@@ -332,9 +417,16 @@ export function HistoryPanel() {
       toast.error("This move is not proven complete. Review it again before confirming.");
       return;
     }
-    if (!confirm(`Confirm that "${op.fromName}" was moved successfully? This updates the recovery journal only; it does not change any files.`)) return;
+    if (
+      !confirm(
+        `Confirm that "${op.fromName}" was moved successfully? This updates the recovery journal only; it does not change any files.`,
+      )
+    )
+      return;
     try {
-      await journal.putOp({ ...op, state: "native-moved", updatedAt: Date.now(), error: undefined });
+      const cleared: OpRecord = { ...op, state: "native-moved", updatedAt: Date.now() };
+      delete cleared.error;
+      await journal.putOp(cleared);
       const refreshed = await journal.opsFor(batch.id);
       setOps(refreshed);
       setRecoveryRows((current) => ({
@@ -352,16 +444,26 @@ export function HistoryPanel() {
 
   const restore = async (batch: BatchRecord) => {
     if (!journal || restoring) return;
-    if (!confirm("Restore verified quarantined files to their original folders? DriveTidy checks for existing files and skips conflicts rather than intentionally overwriting them.")) return;
+    if (
+      !confirm(
+        "Restore verified quarantined files to their original folders? DriveTidy checks for existing files and skips conflicts rather than intentionally overwriting them.",
+      )
+    )
+      return;
     setRestoring(batch.id);
     try {
       const root = await journal.getRoot(batch.rootId);
-      if (!root?.handle) throw new Error("The original drive handle is unavailable. Reconnect the same drive before restoring.");
+      if (!root?.handle)
+        throw new Error(
+          "The original drive handle is unavailable. Reconnect the same drive before restoring.",
+        );
       const operations = await journal.opsFor(batch.id);
       const result = await restoreQuarantinedBatch(root.handle, journal, batch, operations);
       await reload();
       if (open === batch.id) setOps(await journal.opsFor(batch.id));
-      toast.success(`Restored ${result.restored} files${result.alreadyRestored ? ` · ${result.alreadyRestored} already restored` : ""}${result.skipped ? ` · ${result.skipped} skipped` : ""}`);
+      toast.success(
+        `Restored ${result.restored} files${result.alreadyRestored ? ` · ${result.alreadyRestored} already restored` : ""}${result.skipped ? ` · ${result.skipped} skipped` : ""}`,
+      );
       if (result.failures.length) toast.error(result.failures.slice(0, 3).join("\n"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -373,7 +475,11 @@ export function HistoryPanel() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground">Export a portable history backup or import one as read-only archive. Backups contain paths and operation metadata, never file contents. Imported records cannot perform recovery actions.</p>
+        <p className="text-sm text-muted-foreground">
+          Export a portable history backup or import one as read-only archive. Backups contain paths
+          and operation metadata, never file contents. Imported records cannot perform recovery
+          actions.
+        </p>
         <div className="flex flex-wrap gap-2">
           <input
             ref={backupInput}
@@ -382,36 +488,134 @@ export function HistoryPanel() {
             className="hidden"
             onChange={(event) => void importHistory(event.target.files?.[0])}
           />
-          <Button variant="outline" size="sm" disabled={!journal || backupBusy || backupMode !== null} onClick={exportHistory}>{backupBusy ? "Working…" : "Export backup"}</Button>
-          <Button variant="outline" size="sm" disabled={!journal || backupBusy} onClick={() => { setBackupMode(backupMode === "encrypt-export" ? null : "encrypt-export"); setBackupPassphrase(""); setBackupPassphraseConfirm(""); }}>Encrypted export</Button>
-          <Button variant="outline" size="sm" disabled={!journal || backupBusy || backupMode !== null} onClick={() => backupInput.current?.click()}>Import backup</Button>
-          <Button variant="outline" size="sm" onClick={() => setShowDismissed((v) => !v)}>{showDismissed ? "Hide dismissed" : "Show dismissed"}</Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!journal || backupBusy || backupMode !== null}
+            onClick={exportHistory}
+          >
+            {backupBusy ? "Working…" : "Export backup"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!journal || backupBusy}
+            onClick={() => {
+              setBackupMode(backupMode === "encrypt-export" ? null : "encrypt-export");
+              setBackupPassphrase("");
+              setBackupPassphraseConfirm("");
+            }}
+          >
+            Encrypted export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!journal || backupBusy || backupMode !== null}
+            onClick={() => backupInput.current?.click()}
+          >
+            Import backup
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowDismissed((v) => !v)}>
+            {showDismissed ? "Hide dismissed" : "Show dismissed"}
+          </Button>
         </div>
       </div>
-      {backupMode && <div className="rounded-md border border-border bg-card p-3 space-y-2">
-        <p className="text-sm font-medium">{backupMode === "encrypt-export" ? "Encrypt history backup" : "Unlock encrypted history backup"}</p>
-        <p className="text-xs text-muted-foreground">{backupMode === "encrypt-export" ? "Use at least 12 characters. The passphrase is never saved; if lost, this backup cannot be opened." : "The decrypted history remains archived and read-only."}</p>
-        <input aria-label="Backup passphrase" type="password" autoComplete="new-password" value={backupPassphrase} onChange={(event) => setBackupPassphrase(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm" />
-        {backupMode === "encrypt-export" && <input aria-label="Confirm backup passphrase" type="password" autoComplete="new-password" value={backupPassphraseConfirm} onChange={(event) => setBackupPassphraseConfirm(event.target.value)} className="w-full rounded-md border bg-background px-3 py-2 text-sm" />}
-        <div className="flex gap-2">
-          <Button size="sm" disabled={backupBusy || (backupMode === "encrypt-export" ? backupPassphrase.length < 12 || backupPassphrase !== backupPassphraseConfirm : !backupPassphrase)} onClick={() => backupMode === "encrypt-export" ? void exportEncryptedHistory() : void importEncryptedHistory()}>{backupBusy ? "Working…" : backupMode === "encrypt-export" ? "Create encrypted backup" : "Decrypt and import"}</Button>
-          <Button size="sm" variant="outline" disabled={backupBusy} onClick={() => { setBackupMode(null); setPendingBackupFile(null); setBackupPassphrase(""); setBackupPassphraseConfirm(""); }}>Cancel</Button>
+      {backupMode && (
+        <div className="rounded-md border border-border bg-card p-3 space-y-2">
+          <p className="text-sm font-medium">
+            {backupMode === "encrypt-export"
+              ? "Encrypt history backup"
+              : "Unlock encrypted history backup"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {backupMode === "encrypt-export"
+              ? "Use at least 12 characters. The passphrase is never saved; if lost, this backup cannot be opened."
+              : "The decrypted history remains archived and read-only."}
+          </p>
+          <input
+            aria-label="Backup passphrase"
+            type="password"
+            autoComplete="new-password"
+            value={backupPassphrase}
+            onChange={(event) => setBackupPassphrase(event.target.value)}
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+          />
+          {backupMode === "encrypt-export" && (
+            <input
+              aria-label="Confirm backup passphrase"
+              type="password"
+              autoComplete="new-password"
+              value={backupPassphraseConfirm}
+              onChange={(event) => setBackupPassphraseConfirm(event.target.value)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+            />
+          )}
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              disabled={
+                backupBusy ||
+                (backupMode === "encrypt-export"
+                  ? backupPassphrase.length < 12 || backupPassphrase !== backupPassphraseConfirm
+                  : !backupPassphrase)
+              }
+              onClick={() =>
+                backupMode === "encrypt-export"
+                  ? void exportEncryptedHistory()
+                  : void importEncryptedHistory()
+              }
+            >
+              {backupBusy
+                ? "Working…"
+                : backupMode === "encrypt-export"
+                  ? "Create encrypted backup"
+                  : "Decrypt and import"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={backupBusy}
+              onClick={() => {
+                setBackupMode(null);
+                setPendingBackupFile(null);
+                setBackupPassphrase("");
+                setBackupPassphraseConfirm("");
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
-      </div>}
+      )}
       {reviewing && reviewProgress && (
         <div className="rounded-md border border-border bg-card p-3 space-y-2">
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span>Inspecting recovery records: {reviewProgress.done.toLocaleString()} / {reviewProgress.total.toLocaleString()}</span>
-            <Button size="sm" variant="outline" onClick={() => reviewAbort.current?.abort()}>Cancel inspection</Button>
+            <span>
+              Inspecting recovery records: {reviewProgress.done.toLocaleString()} /{" "}
+              {reviewProgress.total.toLocaleString()}
+            </span>
+            <Button size="sm" variant="outline" onClick={() => reviewAbort.current?.abort()}>
+              Cancel inspection
+            </Button>
           </div>
-          <Progress value={reviewProgress.total ? (reviewProgress.done / reviewProgress.total) * 100 : 0} />
-          <p className="text-xs text-muted-foreground">This is a read-only check. File contents are never moved, renamed or deleted during inspection. Large files can take longer because their contents are verified.</p>
+          <Progress
+            value={reviewProgress.total ? (reviewProgress.done / reviewProgress.total) * 100 : 0}
+          />
+          <p className="text-xs text-muted-foreground">
+            This is a read-only check. File contents are never moved, renamed or deleted during
+            inspection. Large files can take longer because their contents are verified.
+          </p>
         </div>
       )}
-      {visible.length === 0 && <p className="text-sm text-muted-foreground">No recorded operations yet.</p>}
+      {visible.length === 0 && (
+        <p className="text-sm text-muted-foreground">No recorded operations yet.</p>
+      )}
       {visible.map((r) =>
         "unreadable" in r ? (
-          <div key={r.id} className="rounded-md border p-3 text-sm">Unreadable record – needs review</div>
+          <div key={r.id} className="rounded-md border p-3 text-sm">
+            Unreadable record – needs review
+          </div>
         ) : (
           <div key={r.id} className="rounded-md border p-3 text-sm space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -421,26 +625,64 @@ export function HistoryPanel() {
               {r.irreversible && <Badge variant="outline">Irreversible</Badge>}
               {r.dryRun && <Badge variant="outline">Plan only</Badge>}
               {r.durability === "relaxed" && <Badge variant="outline">Relaxed save</Badge>}
-              <span className="text-muted-foreground">{new Date(r.createdAt).toLocaleString()}</span>
+              <span className="text-muted-foreground">
+                {new Date(r.createdAt).toLocaleString()}
+              </span>
               <div className="ml-auto flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => toggle(r.id)}>{open === r.id ? "Hide files" : "Files"}</Button>
+                <Button size="sm" variant="ghost" onClick={() => toggle(r.id)}>
+                  {open === r.id ? "Hide files" : "Files"}
+                </Button>
                 {isUnfinished(r) && recoverySummaries[r.id]?.safeToFinalize && (
                   <Button size="sm" variant="outline" onClick={() => finalizeRecoveredBatch(r)}>
                     Finalize verified batch
                   </Button>
                 )}
                 {isUnfinished(r) && !r.importedAt && (
-                  <Button size="sm" variant="outline" disabled={!!reviewing} onClick={() => inspectRecovery(r)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!!reviewing}
+                    onClick={() => inspectRecovery(r)}
+                  >
                     {reviewing === r.id ? "Inspecting…" : "Review recovery"}
                   </Button>
                 )}
                 {r.kind === "quarantine-move" && !isUnfinished(r) && !r.importedAt && (
-                  <Button size="sm" variant="outline" disabled={!!restoring} onClick={() => restore(r)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!!restoring}
+                    onClick={() => restore(r)}
+                  >
                     {restoring === r.id ? "Restoring…" : "Restore files"}
                   </Button>
                 )}
-                {r.visibility !== "dismissed" && <Button size="sm" variant="ghost" onClick={async () => { await journal?.setVisibility(r.id, "dismissed"); reload(); }}>Dismiss</Button>}
-                {!isUnfinished(r) && <Button size="sm" variant="ghost" onClick={async () => { if (confirm("Remove this record from history? Files are not changed.")) { await journal?.deleteRecord(r.id); reload(); } }}>Delete record</Button>}
+                {r.visibility !== "dismissed" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      await journal?.setVisibility(r.id, "dismissed");
+                      reload();
+                    }}
+                  >
+                    Dismiss
+                  </Button>
+                )}
+                {!isUnfinished(r) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (confirm("Remove this record from history? Files are not changed.")) {
+                        await journal?.deleteRecord(r.id);
+                        reload();
+                      }
+                    }}
+                  >
+                    Delete record
+                  </Button>
+                )}
               </div>
             </div>
             {open === r.id && (
@@ -450,17 +692,50 @@ export function HistoryPanel() {
                   const review = recoveryRows[o.id];
                   return (
                     <li key={o.id} className="rounded border border-border/60 p-2">
-                      <div><span className="font-mono">{o.fromDir}/{o.fromName}</span> → <span className="font-mono">{o.toPath ?? o.toDir}/{o.finalName ?? o.intendedName}</span> · {o.state}{o.error ? ` · ${o.error}` : ""}</div>
+                      <div>
+                        <span className="font-mono">
+                          {o.fromDir}/{o.fromName}
+                        </span>{" "}
+                        →{" "}
+                        <span className="font-mono">
+                          {o.toPath ?? o.toDir}/{o.finalName ?? o.intendedName}
+                        </span>{" "}
+                        · {o.state}
+                        {o.error ? ` · ${o.error}` : ""}
+                      </div>
                       {review && (
                         <div className="mt-1 space-y-1">
-                          <Badge variant={["needs-review", "conflict", "waiting-for-access"].includes(review.result.outcome) ? "destructive" : "secondary"}>{review.result.label}</Badge>
-                          <div className="text-muted-foreground">Source: {review.observation.source} · Destination: {review.observation.dest}</div>
-                          {review.result.actions.length > 0 && <div className="text-muted-foreground">Suggested next step: {review.result.actions.join(" · ")}</div>}
-                          {review.result.outcome === "completed" && review.observation.destSame && o.state !== "native-moved" && (
-                            <Button size="sm" variant="outline" onClick={() => confirmRecoveredMove(r, o)}>
-                              Confirm this move
-                            </Button>
+                          <Badge
+                            variant={
+                              ["needs-review", "conflict", "waiting-for-access"].includes(
+                                review.result.outcome,
+                              )
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {review.result.label}
+                          </Badge>
+                          <div className="text-muted-foreground">
+                            Source: {review.observation.source} · Destination:{" "}
+                            {review.observation.dest}
+                          </div>
+                          {review.result.actions.length > 0 && (
+                            <div className="text-muted-foreground">
+                              Suggested next step: {review.result.actions.join(" · ")}
+                            </div>
                           )}
+                          {review.result.outcome === "completed" &&
+                            review.observation.destSame &&
+                            o.state !== "native-moved" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => confirmRecoveredMove(r, o)}
+                              >
+                                Confirm this move
+                              </Button>
+                            )}
                         </div>
                       )}
                     </li>
@@ -477,14 +752,35 @@ export function HistoryPanel() {
 
 export function RecoveryNotice({ onReview }: { onReview: () => void }) {
   const { journal, rows, reload } = useJournalBatches();
-  const pending = rows.filter((r): r is BatchRecord => !("unreadable" in r) && isUnfinished(r) && !r.importedAt && r.visibility === "active");
+  const pending = rows.filter(
+    (r): r is BatchRecord =>
+      !("unreadable" in r) && isUnfinished(r) && !r.importedAt && r.visibility === "active",
+  );
   if (!pending.length) return null;
   return (
-    <div role="status" className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-      <p>DriveTidy found an unfinished operation from a previous session. Some files may already have been moved. No automatic recovery actions have been performed. Review the operation history before continuing.</p>
+    <div
+      role="status"
+      className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm"
+    >
+      <p>
+        DriveTidy found an unfinished operation from a previous session. Some files may already have
+        been moved. No automatic recovery actions have been performed. Review the operation history
+        before continuing.
+      </p>
       <div className="mt-2 flex gap-2">
-        <Button size="sm" onClick={onReview}>Review</Button>
-        <Button size="sm" variant="outline" onClick={async () => { for (const b of pending) await journal?.setVisibility(b.id, "dismissed"); reload(); }}>Dismiss</Button>
+        <Button size="sm" onClick={onReview}>
+          Review
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={async () => {
+            for (const b of pending) await journal?.setVisibility(b.id, "dismissed");
+            reload();
+          }}
+        >
+          Dismiss
+        </Button>
       </div>
     </div>
   );

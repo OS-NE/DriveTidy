@@ -1,6 +1,10 @@
 import type { ToolProvider } from "./ai-provider";
 
-export type NamingUsage = { inputTokens: number | null; outputTokens: number | null; totalTokens: number | null };
+export type NamingUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+};
 export type BatchUsage = {
   provider: ToolProvider;
   estimatedRequests: number;
@@ -12,12 +16,29 @@ export type BatchUsage = {
   totalTokens: number;
 };
 
-export function normalizeNamingUsage(usage: { inputTokens?: number | undefined; outputTokens?: number | undefined; totalTokens?: number | undefined } | undefined): NamingUsage {
-  const token = (value: number | undefined) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
-  return { inputTokens: token(usage?.inputTokens), outputTokens: token(usage?.outputTokens), totalTokens: token(usage?.totalTokens) };
+export function normalizeNamingUsage(
+  usage:
+    | {
+        inputTokens?: number | undefined;
+        outputTokens?: number | undefined;
+        totalTokens?: number | undefined;
+      }
+    | undefined,
+): NamingUsage {
+  const token = (value: number | undefined) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+  return {
+    inputTokens: token(usage?.inputTokens),
+    outputTokens: token(usage?.outputTokens),
+    totalTokens: token(usage?.totalTokens),
+  };
 }
 
-export function addNamingUsage(batch: BatchUsage, success: boolean, usage?: NamingUsage): BatchUsage {
+export function addNamingUsage(
+  batch: BatchUsage,
+  success: boolean,
+  usage?: NamingUsage,
+): BatchUsage {
   return {
     ...batch,
     actualRequests: batch.actualRequests + 1,

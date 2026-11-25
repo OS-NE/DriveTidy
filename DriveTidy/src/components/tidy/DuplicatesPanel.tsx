@@ -132,7 +132,16 @@ export function DuplicatesPanel({
           // Re-prove identity right before acting: files may have changed since the scan.
           await revalidateDuplicate(keep, f);
           const sub = await ensureDir(dest, f.path.split("/").slice(0, -1).join("/"));
-          await journaledMove(journalRun, f, sub, f.name, (file, dir, name) => moveFile(file, dir, name), [mode === "move" ? folder : quarantineFolder, f.path.split("/").slice(0, -1).join("/")].filter(Boolean).join("/"));
+          await journaledMove(
+            journalRun,
+            f,
+            sub,
+            f.name,
+            (file, dir, name) => moveFile(file, dir, name),
+            [mode === "move" ? folder : quarantineFolder, f.path.split("/").slice(0, -1).join("/")]
+              .filter(Boolean)
+              .join("/"),
+          );
           logActivity(
             "moved",
             f.path,
@@ -146,14 +155,16 @@ export function DuplicatesPanel({
           logActivity("failed", f.path, e instanceof Error ? e.message : String(e));
         }
       }
-      if (journalRun) await finishJournalRun(journalRun, fail ? "completed-with-issues" : "completed", fail);
+      if (journalRun)
+        await finishJournalRun(journalRun, fail ? "completed-with-issues" : "completed", fail);
       toast.success(
         `${mode === "move" ? "Moved" : "Quarantined"} ${ok} files${fail ? `, ${fail} failed` : ""}`,
       );
       setGroups(null);
       onChanged();
     } catch (e) {
-      if (journalRun) await finishJournalRun(journalRun, "completed-with-issues", 1).catch(() => undefined);
+      if (journalRun)
+        await finishJournalRun(journalRun, "completed-with-issues", 1).catch(() => undefined);
       toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -163,30 +174,30 @@ export function DuplicatesPanel({
   if (!groups) {
     return (
       <>
-      <CrossDriveCompare root={root} files={files} />
-      <div className="rounded-lg border border-dashed border-border p-10 text-center">
-        <p className="text-muted-foreground">
-          Compares file sizes, then fingerprints, then verifies every byte of large matches. Nothing
-          is changed until you confirm.
-        </p>
-        {progress ? (
-          <div className="mx-auto mt-6 max-w-sm space-y-2">
-            <Progress value={(progress[0] / Math.max(1, progress[1])) * 100} />
-            <p className="font-mono text-xs text-muted-foreground">
-              {progress[2] === "candidates"
-                ? `Step 1 · finding candidates ${progress[0]} / ${progress[1]}`
-                : `Step 2 · verifying full contents ${formatBytes(progress[0])} / ${formatBytes(progress[1])}`}
-            </p>
-            <Button variant="outline" size="sm" onClick={() => stopper?.abort()}>
-              Stop
+        <CrossDriveCompare root={root} files={files} />
+        <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <p className="text-muted-foreground">
+            Compares file sizes, then fingerprints, then verifies every byte of large matches.
+            Nothing is changed until you confirm.
+          </p>
+          {progress ? (
+            <div className="mx-auto mt-6 max-w-sm space-y-2">
+              <Progress value={(progress[0] / Math.max(1, progress[1])) * 100} />
+              <p className="font-mono text-xs text-muted-foreground">
+                {progress[2] === "candidates"
+                  ? `Step 1 · finding candidates ${progress[0]} / ${progress[1]}`
+                  : `Step 2 · verifying full contents ${formatBytes(progress[0])} / ${formatBytes(progress[1])}`}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => stopper?.abort()}>
+                Stop
+              </Button>
+            </div>
+          ) : (
+            <Button className="mt-6" onClick={scan} disabled={!files.length}>
+              Find duplicates in {files.length} files
             </Button>
-          </div>
-        ) : (
-          <Button className="mt-6" onClick={scan} disabled={!files.length}>
-            Find duplicates in {files.length} files
-          </Button>
-        )}
-      </div>
+          )}
+        </div>
       </>
     );
   }
@@ -294,15 +305,17 @@ export function DuplicatesPanel({
           <AlertDialogHeader>
             <AlertDialogTitle>Quarantine {chosen.length} verified duplicates?</AlertDialogTitle>
             <AlertDialogDescription>
-              Only fully verified copies are included, and each is re-checked against its kept original
-              immediately before moving. DriveTidy moves them into _DriveTidy_Quarantine and preserves
-              their relative folders. This does not permanently delete data; review the quarantined
-              files and remove them yourself when you are certain.
+              Only fully verified copies are included, and each is re-checked against its kept
+              original immediately before moving. DriveTidy moves them into _DriveTidy_Quarantine
+              and preserves their relative folders. This does not permanently delete data; review
+              the quarantined files and remove them yourself when you are certain.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => run("quarantine")}>Move to quarantine</AlertDialogAction>
+            <AlertDialogAction onClick={() => run("quarantine")}>
+              Move to quarantine
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

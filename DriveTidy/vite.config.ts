@@ -28,12 +28,14 @@ export default defineConfig({
           // Navigations are network-first so a stale shell is never served when online.
           runtimeCaching: [
             {
-              urlPattern: ({ request, url }) => request.mode === "navigate" && !url.pathname.startsWith("/~oauth"),
+              urlPattern: ({ request, url }) =>
+                request.mode === "navigate" && !url.pathname.startsWith("/~oauth"),
               handler: "NetworkFirst",
               options: { cacheName: "pages", networkTimeoutSeconds: 4 },
             },
             {
-              urlPattern: ({ url, sameOrigin }) => sameOrigin && /\.(?:js|css|woff2?|png|jpg|svg|ico|webmanifest)$/.test(url.pathname),
+              urlPattern: ({ url, sameOrigin }) =>
+                sameOrigin && /\.(?:js|css|woff2?|png|jpg|svg|ico|webmanifest)$/.test(url.pathname),
               handler: "CacheFirst",
               options: { cacheName: "assets" },
             },

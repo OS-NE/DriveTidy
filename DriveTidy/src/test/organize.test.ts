@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { shouldAutoRename, categoryOf, isPoorlyNamed, uniqueName, targetFolder, nextRenameBatch, groupFolderPlan, estimateRenameRequests, customTargetFolder, safeRelativeFolder, recommendStructure } from "@/lib/organize";
+import {
+  shouldAutoRename,
+  categoryOf,
+  isPoorlyNamed,
+  uniqueName,
+  targetFolder,
+  nextRenameBatch,
+  groupFolderPlan,
+  estimateRenameRequests,
+  customTargetFolder,
+  safeRelativeFolder,
+  recommendStructure,
+} from "@/lib/organize";
 
 describe("organize rules", () => {
   it("estimates one request per remaining file, bounded to 200 for the next batch", () => {
@@ -42,26 +54,63 @@ describe("organize rules", () => {
     expect(uniqueName("a.jpg", new Set(["a.jpg", "a-2.jpg"]))).toBe("a-3.jpg");
   });
   it("builds date folders", () => {
-    expect(targetFolder({ path: "x.jpg", name: "x.jpg", lastModified: new Date(2024, 2, 5).getTime() }, "category-date")).toBe("Images/2024/2024-03");
+    expect(
+      targetFolder(
+        { path: "x.jpg", name: "x.jpg", lastModified: new Date(2024, 2, 5).getTime() },
+        "category-date",
+      ),
+    ).toBe("Images/2024/2024-03");
   });
   it("expands supported custom folder tokens and validates the result", () => {
-    expect(customTargetFolder({ path: "Trips/Beach.jpg", name: "Beach.jpg", lastModified: new Date(2024, 2, 5).getTime() }, "{category}/{year}/{month}/{extension}"))
-      .toBe("Images/2024/03/jpg");
-    expect(customTargetFolder({ path: "Trips/Beach.jpg", name: "Beach.jpg", lastModified: 0 }, "{currentFolder}/{extension}"))
-      .toBe("Trips/jpg");
-    expect(() => customTargetFolder({ path: "x.jpg", name: "x.jpg", lastModified: 0 }, "{unknown}/folder")).toThrow(/Unknown folder template token/);
-    expect(() => customTargetFolder({ path: "x.jpg", name: "x.jpg", lastModified: 0 }, "../escape")).toThrow(/cannot contain/);
+    expect(
+      customTargetFolder(
+        {
+          path: "Trips/Beach.jpg",
+          name: "Beach.jpg",
+          lastModified: new Date(2024, 2, 5).getTime(),
+        },
+        "{category}/{year}/{month}/{extension}",
+      ),
+    ).toBe("Images/2024/03/jpg");
+    expect(
+      customTargetFolder(
+        { path: "Trips/Beach.jpg", name: "Beach.jpg", lastModified: 0 },
+        "{currentFolder}/{extension}",
+      ),
+    ).toBe("Trips/jpg");
+    expect(() =>
+      customTargetFolder({ path: "x.jpg", name: "x.jpg", lastModified: 0 }, "{unknown}/folder"),
+    ).toThrow(/Unknown folder template token/);
+    expect(() =>
+      customTargetFolder({ path: "x.jpg", name: "x.jpg", lastModified: 0 }, "../escape"),
+    ).toThrow(/cannot contain/);
   });
   it("rejects absolute, traversal, invalid Windows, and reserved destination paths", () => {
-    for (const path of ["../outside", "A/../../outside", "C:/outside", "\\\\server\\share", "name.", "CON", "bad:name", ".hidden", "$system"]) {
+    for (const path of [
+      "../outside",
+      "A/../../outside",
+      "C:/outside",
+      "\\\\server\\share",
+      "name.",
+      "CON",
+      "bad:name",
+      ".hidden",
+      "$system",
+    ]) {
       expect(() => safeRelativeFolder(path), path).toThrow();
     }
     expect(safeRelativeFolder(" Organized\\Photos/ ")).toBe("Organized/Photos");
   });
   it("makes a transparent recommendation from the scanned metadata", () => {
-    expect(recommendStructure(Array.from({ length: 6 }, (_, i) => ({
-      path: `${i % 2 ? "" : "old/"}${i}.${i % 2 ? "pdf" : "jpg"}`, name: `${i}.${i % 2 ? "pdf" : "jpg"}`, lastModified: new Date(2024, 0, i + 1).getTime(),
-    })))).toMatchObject({ strategy: "category-date", title: "Category → year → month" });
+    expect(
+      recommendStructure(
+        Array.from({ length: 6 }, (_, i) => ({
+          path: `${i % 2 ? "" : "old/"}${i}.${i % 2 ? "pdf" : "jpg"}`,
+          name: `${i}.${i % 2 ? "pdf" : "jpg"}`,
+          lastModified: new Date(2024, 0, i + 1).getTime(),
+        })),
+      ),
+    ).toMatchObject({ strategy: "category-date", title: "Category → year → month" });
     expect(recommendStructure([])).toBeNull();
   });
   it("serves rename batches beyond the first run, skipping processed files", () => {

@@ -1,13 +1,67 @@
 // Pure planning logic (no browser APIs) so it can be unit tested.
 
-export type Category = "3D Print" | "Images" | "Videos" | "Audio" | "Documents" | "Archives" | "Code" | "Other";
+export type Category =
+  "3D Print" | "Images" | "Videos" | "Audio" | "Documents" | "Archives" | "Code" | "Other";
 
 const EXT: Record<Exclude<Category, "Other">, string[]> = {
-  "3D Print": ["stl", "3mf", "gcode", "gco", "g", "nc", "obj", "step", "stp", "iges", "igs", "scad", "ply", "blend", "f3d", "amf", "ctm", "wrl", "x3d", "3ds", "x3g", "sldprt", "sldasm", "prt"],
-  Images: ["jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp", "tiff", "svg", "raw", "cr2", "nef"],
+  "3D Print": [
+    "stl",
+    "3mf",
+    "gcode",
+    "gco",
+    "g",
+    "nc",
+    "obj",
+    "step",
+    "stp",
+    "iges",
+    "igs",
+    "scad",
+    "ply",
+    "blend",
+    "f3d",
+    "amf",
+    "ctm",
+    "wrl",
+    "x3d",
+    "3ds",
+    "x3g",
+    "sldprt",
+    "sldasm",
+    "prt",
+  ],
+  Images: [
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "heic",
+    "heif",
+    "bmp",
+    "tiff",
+    "svg",
+    "raw",
+    "cr2",
+    "nef",
+  ],
   Videos: ["mp4", "mov", "avi", "mkv", "webm", "m4v", "wmv", "flv", "3gp"],
   Audio: ["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma"],
-  Documents: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md", "rtf", "odt", "csv", "epub"],
+  Documents: [
+    "pdf",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "ppt",
+    "pptx",
+    "txt",
+    "md",
+    "rtf",
+    "odt",
+    "csv",
+    "epub",
+  ],
   Archives: ["zip", "rar", "7z", "tar", "gz", "bz2", "iso"],
   Code: ["js", "ts", "tsx", "py", "java", "c", "cpp", "html", "css", "json", "xml", "sh"],
 };
@@ -27,7 +81,13 @@ export type Strategy = "category" | "type" | "date" | "category-date" | "custom"
 export type BuiltInStrategy = Exclude<Strategy, "custom">;
 export type CustomFolderToken = "category" | "extension" | "year" | "month" | "currentFolder";
 
-const CUSTOM_FOLDER_TOKENS = new Set<CustomFolderToken>(["category", "extension", "year", "month", "currentFolder"]);
+const CUSTOM_FOLDER_TOKENS = new Set<CustomFolderToken>([
+  "category",
+  "extension",
+  "year",
+  "month",
+  "currentFolder",
+]);
 
 /** Validate a relative folder path before passing it to the filesystem API. */
 export function safeRelativeFolder(path: string): string {
@@ -42,8 +102,10 @@ export function safeRelativeFolder(path: string): string {
   }
   const segments = normalized.split("/");
   for (const segment of segments) {
-    if (!segment || segment === "." || segment === "..") throw new Error("Folder paths cannot contain empty, . or .. segments.");
-    if (segment.startsWith(".") || segment.startsWith("$")) throw new Error("Folder paths cannot create hidden or system-style folders.");
+    if (!segment || segment === "." || segment === "..")
+      throw new Error("Folder paths cannot contain empty, . or .. segments.");
+    if (segment.startsWith(".") || segment.startsWith("$"))
+      throw new Error("Folder paths cannot create hidden or system-style folders.");
     // eslint-disable-next-line no-control-regex
     if (/[<>:"|?*\u0000-\u001f]/.test(segment) || /[. ]$/.test(segment)) {
       throw new Error(`Folder name "${segment}" contains characters Windows cannot safely store.`);
@@ -63,11 +125,14 @@ export function customTargetFolder(f: PlanInput, template: string): string {
     category: categoryOf(f.name),
     extension: extOf(f.name) || "no-extension",
     year: Number.isFinite(d.getTime()) ? String(d.getFullYear()) : "unknown-date",
-    month: Number.isFinite(d.getTime()) ? String(d.getMonth() + 1).padStart(2, "0") : "unknown-date",
+    month: Number.isFinite(d.getTime())
+      ? String(d.getMonth() + 1).padStart(2, "0")
+      : "unknown-date",
     currentFolder: f.path.split("/").slice(0, -1).join("/") || "root",
   };
   const expanded = template.replace(/\{([^{}]+)\}/g, (_match, token: string) => {
-    if (!CUSTOM_FOLDER_TOKENS.has(token as CustomFolderToken)) throw new Error(`Unknown folder template token: {${token}}.`);
+    if (!CUSTOM_FOLDER_TOKENS.has(token as CustomFolderToken))
+      throw new Error(`Unknown folder template token: {${token}}.`);
     return values[token as CustomFolderToken];
   });
   if (/[{}]/.test(expanded)) throw new Error("Folder template has an unclosed token.");
@@ -86,14 +151,28 @@ export function recommendStructure(files: PlanInput[]): StructureRecommendation 
   if (eligible.length < 5) return null;
   const rootFiles = eligible.filter((f) => !f.path.includes("/")).length;
   const categories = new Set(eligible.map((f) => categoryOf(f.name)));
-  const dated = eligible.filter((f) => Number.isFinite(new Date(f.lastModified).getTime()) && f.lastModified > 0).length;
+  const dated = eligible.filter(
+    (f) => Number.isFinite(new Date(f.lastModified).getTime()) && f.lastModified > 0,
+  ).length;
   if (dated / eligible.length >= 0.9 && categories.size >= 2) {
-    return { title: "Category → year → month", detail: `${categories.size} file categories and usable modified dates across ${eligible.length} files. Dates use each file’s last-modified metadata.`, strategy: "category-date" };
+    return {
+      title: "Category → year → month",
+      detail: `${categories.size} file categories and usable modified dates across ${eligible.length} files. Dates use each file’s last-modified metadata.`,
+      strategy: "category-date",
+    };
   }
   if (rootFiles / eligible.length >= 0.6) {
-    return { title: "Sort into category folders", detail: `${Math.round((rootFiles / eligible.length) * 100)}% of eligible files are currently at the selected folder’s root.`, strategy: "category" };
+    return {
+      title: "Sort into category folders",
+      detail: `${Math.round((rootFiles / eligible.length) * 100)}% of eligible files are currently at the selected folder’s root.`,
+      strategy: "category",
+    };
   }
-  return { title: "Sort by file type", detail: `The scan contains ${categories.size} categories; grouping by extension can make a mixed collection easier to browse.`, strategy: "type" };
+  return {
+    title: "Sort by file type",
+    detail: `The scan contains ${categories.size} categories; grouping by extension can make a mixed collection easier to browse.`,
+    strategy: "type",
+  };
 }
 
 /** Group in linear time without repeatedly copying every preceding file. */
@@ -133,7 +212,9 @@ export function targetFolder(f: PlanInput, strategy: BuiltInStrategy): string {
 export function isPoorlyNamed(name: string): boolean {
   const base = name.replace(/\.[^.]+$/, "");
   return (
-    /^(img|dsc|dscn|dcim|pxl|mvimg|vid|mov|wp|photo|image|video|screenshot|untitled|new|file|download)[-_ ]?\d*/i.test(base) ||
+    /^(img|dsc|dscn|dcim|pxl|mvimg|vid|mov|wp|photo|image|video|screenshot|untitled|new|file|download)[-_ ]?\d*/i.test(
+      base,
+    ) ||
     /^[\d\-_ .()]+$/.test(base) ||
     /^[a-f0-9-]{16,}$/i.test(base) ||
     base.length <= 2
@@ -142,13 +223,15 @@ export function isPoorlyNamed(name: string): boolean {
 
 /** Turn an AI suggestion into a safe, clean filename slug. */
 export function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "file";
+  return (
+    s
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 60) || "file"
+  );
 }
 
 /** Auto-apply threshold for AI rename confidence (0..1). */
@@ -165,7 +248,10 @@ export const RENAME_BATCH_SIZE = 200;
 export const RENAME_BATCH_SIZES = [10, 20, 50, 100, 200] as const;
 
 /** One naming request per file; failures may stop a run before this maximum. */
-export function estimateRenameRequests(remainingFiles: number, batchSize: number = RENAME_BATCH_SIZE) {
+export function estimateRenameRequests(
+  remainingFiles: number,
+  batchSize: number = RENAME_BATCH_SIZE,
+) {
   return { batch: Math.min(remainingFiles, batchSize), remaining: remainingFiles };
 }
 
@@ -209,33 +295,188 @@ export function formatBytes(b: number): string {
 /** Executable/script extensions skipped during scans so Chrome never raises dangerous-file prompts. */
 export const UNSAFE_EXTS = new Set([
   // Windows executables, installers, libraries
-  "exe", "msi", "msp", "msc", "bat", "cmd", "com", "scr", "pif", "cpl", "dll", "sys", "drv", "ocx", "efi",
-  "appx", "appxbundle", "msix", "msixbundle", "gadget", "application", "xbap", "cab", "mui",
+  "exe",
+  "msi",
+  "msp",
+  "msc",
+  "bat",
+  "cmd",
+  "com",
+  "scr",
+  "pif",
+  "cpl",
+  "dll",
+  "sys",
+  "drv",
+  "ocx",
+  "efi",
+  "appx",
+  "appxbundle",
+  "msix",
+  "msixbundle",
+  "gadget",
+  "application",
+  "xbap",
+  "cab",
+  "mui",
   // Shortcuts, registry, config that Chrome flags
-  "lnk", "reg", "inf", "url", "scf", "website", "settingcontent-ms", "library-ms", "search-ms", "desktop",
+  "lnk",
+  "reg",
+  "inf",
+  "url",
+  "scf",
+  "website",
+  "settingcontent-ms",
+  "library-ms",
+  "search-ms",
+  "desktop",
   // Windows scripts
-  "js", "mjs", "cjs", "jse", "vbs", "vbe", "wsf", "wsh", "wsc", "hta", "ps1", "psm1", "psd1", "ps1xml", "psc1", "msh", "msh1", "msh2",
+  "js",
+  "mjs",
+  "cjs",
+  "jse",
+  "vbs",
+  "vbe",
+  "wsf",
+  "wsh",
+  "wsc",
+  "hta",
+  "ps1",
+  "psm1",
+  "psd1",
+  "ps1xml",
+  "psc1",
+  "msh",
+  "msh1",
+  "msh2",
   // Unix / mac
-  "sh", "bash", "zsh", "csh", "ksh", "fish", "command", "tool", "run", "bin", "out", "elf", "so", "dylib", "app", "dmg", "pkg", "mpkg", "kext",
+  "sh",
+  "bash",
+  "zsh",
+  "csh",
+  "ksh",
+  "fish",
+  "command",
+  "tool",
+  "run",
+  "bin",
+  "out",
+  "elf",
+  "so",
+  "dylib",
+  "app",
+  "dmg",
+  "pkg",
+  "mpkg",
+  "kext",
   // Linux / mobile packages
-  "deb", "rpm", "apk", "aab", "xapk", "ipa", "snap", "flatpak", "appimage",
+  "deb",
+  "rpm",
+  "apk",
+  "aab",
+  "xapk",
+  "ipa",
+  "snap",
+  "flatpak",
+  "appimage",
   // Interpreted languages and bytecode
-  "py", "pyw", "pyc", "pyo", "pyz", "pyzw", "pyd", "ipynb", "rb", "rbw", "pl", "pm", "php", "phtml", "lua", "tcl", "r", "groovy",
-  "jar", "class", "war", "ear", "jnlp", "swf",
+  "py",
+  "pyw",
+  "pyc",
+  "pyo",
+  "pyz",
+  "pyzw",
+  "pyd",
+  "ipynb",
+  "rb",
+  "rbw",
+  "pl",
+  "pm",
+  "php",
+  "phtml",
+  "lua",
+  "tcl",
+  "r",
+  "groovy",
+  "jar",
+  "class",
+  "war",
+  "ear",
+  "jnlp",
+  "swf",
   // Office macro files and compiled help
-  "docm", "dotm", "xlsm", "xltm", "xlam", "pptm", "potm", "ppam", "sldm", "chm", "hlp",
+  "docm",
+  "dotm",
+  "xlsm",
+  "xltm",
+  "xlam",
+  "pptm",
+  "potm",
+  "ppam",
+  "sldm",
+  "chm",
+  "hlp",
   // Markup/config files Chrome can flag as potentially harmful
-  "xml", "xsl", "xslt", "dtd", "rss", "atom", "xhtml", "config", "ini", "plist", "yaml", "yml", "toml", "env", "properties",
+  "xml",
+  "xsl",
+  "xslt",
+  "dtd",
+  "rss",
+  "atom",
+  "xhtml",
+  "config",
+  "ini",
+  "plist",
+  "yaml",
+  "yml",
+  "toml",
+  "env",
+  "properties",
   // Other risky
-  "iso", "img", "vhd", "vhdx", "vmdk", "crx", "xpi", "xll", "ade", "adp", "mde", "accde", "ins", "isp", "job", "lib", "obj",
+  "iso",
+  "img",
+  "vhd",
+  "vhdx",
+  "vmdk",
+  "crx",
+  "xpi",
+  "xll",
+  "ade",
+  "adp",
+  "mde",
+  "accde",
+  "ins",
+  "isp",
+  "job",
+  "lib",
+  "obj",
 ]);
 
 const SYSTEM_DIRS = new Set([
-  "appdata", "$recycle.bin", "system volume information", "windows", "program files", "program files (x86)",
-  "programdata", "$windows.~bt", "$windows.~ws", "recovery", "node_modules", "library",
+  "appdata",
+  "$recycle.bin",
+  "system volume information",
+  "windows",
+  "program files",
+  "program files (x86)",
+  "programdata",
+  "$windows.~bt",
+  "$windows.~ws",
+  "recovery",
+  "node_modules",
+  "library",
 ]);
 
-const UNSAFE_DOTFILES = new Set([".env", ".htaccess", ".htpasswd", ".npmrc", ".netrc", ".aws", ".ssh", ".gitconfig"]);
+const UNSAFE_DOTFILES = new Set([
+  ".env",
+  ".htaccess",
+  ".htpasswd",
+  ".npmrc",
+  ".netrc",
+  ".aws",
+  ".ssh",
+  ".gitconfig",
+]);
 
 export function isUnsafeFile(name: string): boolean {
   return UNSAFE_EXTS.has(extOf(name)) || UNSAFE_DOTFILES.has(name.toLowerCase());
