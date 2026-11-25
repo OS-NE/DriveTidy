@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInspector, outcomeTone, summarize } from "@/lib/inspect";
+import { arrangeOps, createInspector, outcomeTone, summarize } from "@/lib/inspect";
 import { Sha256 } from "@/lib/sha256";
 import type { OpRecord } from "@/lib/journal";
 
@@ -214,5 +214,35 @@ describe("inspection summary", () => {
     expect(outcomeTone("not-started")).toBe("info");
     expect(outcomeTone("probable-completion")).toBe("warn");
     expect(outcomeTone("needs-review")).toBe("bad");
+  });
+});
+
+describe("arranging operations for review", () => {
+  const row = (outcome: Parameters<typeof outcomeTone>[0]) =>
+    ({
+      observation: { access: "ok", source: "absent", dest: "match" },
+      result: { outcome },
+    }) as never;
+  const ops = ["a", "b", "c", "d"].map((id, seq) => op(enc(id), { id, seq }));
+
+  it("puts entries needing attention first, keeping journal order within a group", () => {
+    const rows = {
+      a: row("completed"),
+      b: row("needs-review"),
+      c: row("probable-completion"),
+      d: row("conflict"),
+    };
+    expect(arrangeOps(ops, rows).map((o) => o.id)).toEqual(["b", "d", "c", "a"]);
+  });
+
+  it("filters by tone and keeps uninspected entries last", () => {
+    const rows = { a: row("completed"), b: row("needs-review") };
+    expect(arrangeOps(ops, rows, "bad").map((o) => o.id)).toEqual(["b"]);
+    expect(arrangeOps(ops, rows).map((o) => o.id)).toEqual(["b", "a", "c", "d"]);
+  });
+
+  it("leaves the journal order alone before anything is inspected", () => {
+    expect(arrangeOps(ops, {}).map((o) => o.id)).toEqual(["a", "b", "c", "d"]);
+    expect(arrangeOps(ops, {}, "bad")).toEqual([]);
   });
 });

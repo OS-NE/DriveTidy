@@ -220,3 +220,31 @@ export function summarize(rows: InspectedOp[], total: number): InspectionSummary
     tones,
   };
 }
+
+const TONE_RANK: Record<Tone, number> = { bad: 0, warn: 1, info: 2, good: 3 };
+
+/**
+ * Orders a batch's operations for review: entries that need attention first, in journal order
+ * within each group. With a tone filter, only entries of that tone are kept. Operations that
+ * have not been inspected keep their journal order and are dropped by any filter.
+ */
+export function arrangeOps(
+  ops: OpRecord[],
+  rows: Record<string, InspectedOp>,
+  filter: Tone | "all" = "all",
+): OpRecord[] {
+  if (!ops.some((op) => rows[op.id])) return filter === "all" ? ops : [];
+  const toneOf = (op: OpRecord) => {
+    const row = rows[op.id];
+    return row ? outcomeTone(row.result.outcome) : null;
+  };
+  const rank = (op: OpRecord) => {
+    const tone = toneOf(op);
+    return tone ? TONE_RANK[tone] : 4;
+  };
+  return ops
+    .filter((op) => filter === "all" || toneOf(op) === filter)
+    .map((op, index) => ({ op, index, rank: rank(op) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.op);
+}
