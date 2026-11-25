@@ -12,8 +12,10 @@ import {
   type Unreadable,
 } from "@/lib/journal";
 import { restoreQuarantinedBatch } from "@/lib/restore";
+import { ResultsPager, RESULTS_PAGE_SIZE } from "./ResultsPager";
 import type { Observation, Classification } from "@/lib/recovery";
 import {
+  arrangeOps,
   createInspector,
   outcomeTone,
   summarize,
@@ -126,6 +128,8 @@ export function HistoryPanel() {
   const [open, setOpen] = useState<string | null>(null);
   const [ops, setOps] = useState<OpRecord[]>([]);
   const [restoring, setRestoring] = useState<string | null>(null);
+  const [opFilter, setOpFilter] = useState<Tone | "all">("all");
+  const [opPage, setOpPage] = useState(0);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [reviewProgress, setReviewProgress] = useState<{
     done: number;
@@ -281,9 +285,17 @@ export function HistoryPanel() {
   const visible = rows.filter(
     (r) => "unreadable" in r || showDismissed || r.visibility !== "dismissed",
   );
+  const arrangedOps = arrangeOps(ops, recoveryRows, opFilter);
+  const pageCount = Math.max(1, Math.ceil(arrangedOps.length / RESULTS_PAGE_SIZE));
+  const pageOps = arrangedOps.slice(
+    Math.min(opPage, pageCount - 1) * RESULTS_PAGE_SIZE,
+    (Math.min(opPage, pageCount - 1) + 1) * RESULTS_PAGE_SIZE,
+  );
   const toggle = async (id: string) => {
     if (open === id) return setOpen(null);
     setOpen(id);
+    setOpFilter("all");
+    setOpPage(0);
     setOps(journal ? await journal.opsFor(id) : []);
   };
 
@@ -331,6 +343,8 @@ export function HistoryPanel() {
       setRecoveryRows((current) => ({ ...current, ...inspected }));
       setOpen(batch.id);
       setOps(operations);
+      setOpFilter("all");
+      setOpPage(0);
       const summary = summarize(Object.values(inspected), total);
       setRecoverySummaries((current) => ({ ...current, [batch.id]: summary }));
       const skipped = inspector.stats.sizeShortcuts;
@@ -670,10 +684,40 @@ export function HistoryPanel() {
             {recoverySummaries[r.id] && isUnfinished(r) && (
               <SummaryStrip summary={recoverySummaries[r.id]!} />
             )}
+            {open === r.id && recoverySummaries[r.id] && (
+              <div className="flex flex-wrap gap-2 text-xs" role="group" aria-label="Filter files">
+                {(["all", "bad", "warn", "info", "good"] as const).map((key) => {
+                  const summary = recoverySummaries[r.id]!;
+                  const count = key === "all" ? summary.total : summary.tones[key];
+                  if (key !== "all" && !count) return null;
+                  return (
+                    <Button
+                      key={key}
+                      size="sm"
+                      variant={opFilter === key ? "default" : "outline"}
+                      aria-pressed={opFilter === key}
+                      onClick={() => {
+                        setOpFilter(key);
+                        setOpPage(0);
+                      }}
+                    >
+                      {key === "all" ? "All" : TONE_LABEL[key]} ({count.toLocaleString()})
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+            {open === r.id && (
+              <ResultsPager
+                page={Math.min(opPage, pageCount - 1)}
+                total={arrangedOps.length}
+                onPage={setOpPage}
+              />
+            )}
             {open === r.id && (
               <ul className="space-y-1 text-xs">
                 {ops.length === 0 && <li className="text-muted-foreground">No files recorded.</li>}
-                {ops.map((o) => {
+                {pageOps.map((o) => {
                   const review = recoveryRows[o.id];
                   const tone = review ? outcomeTone(review.result.outcome) : null;
                   return (
