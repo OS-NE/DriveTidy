@@ -62,19 +62,15 @@ DriveTidy server.
 - Always review a proposed operation before applying it and keep independent backups
   of important files.
 
-
 ### Recovery path safety
 
 New journal entries record the full destination path relative to the selected drive, not only the destination folder name. Recovery review uses that path to inspect the exact destination. For an interrupted move, DriveTidy offers **Confirm this move** only when the original path is absent, the destination SHA-256 matches the recorded content, and the destination handle matches the handle saved by the journal. This confirmation updates history only; it does not move, rename, or delete files. Older records without a full path remain subject to conservative legacy inspection.
 
-
 Safety note: Health checks quarantine problem files rather than permanently deleting them. Restore verified items from History; conflicting original paths are skipped.
-
 
 ### Exporting and importing operation history
 
 In the History panel, use **Export backup** for a portable JSON journal snapshot, or **Encrypted export** to protect the snapshot with a passphrase. Import accepts either format. Encrypted backups use PBKDF2-SHA-256 and AES-256-GCM; choose at least 12 characters and keep the passphrase separately because it cannot be recovered. Backups contain paths and operation metadata but never file contents. Imported entries are archived, read-only records and cannot authorize changes to files.
-
 
 ### Windows installer and persistent desktop storage
 
@@ -92,7 +88,6 @@ untrusted local service or silently switching storage origins.
 To build in GitHub Actions, open **Actions → Build DriveTidy for Windows → Run workflow**.
 The `.exe` is uploaded as a 30-day workflow artifact. Pushing a version tag such as
 `v0.8.0` additionally publishes a GitHub Release with the installer attached.
-
 
 The Windows CI workflow uses Bun because `bun.lock` is the repository's dependency
 lockfile. Electron and electron-builder are pinned in `package.json`. The first
