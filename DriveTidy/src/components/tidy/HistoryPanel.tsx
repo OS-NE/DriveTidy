@@ -321,11 +321,21 @@ export function HistoryPanel() {
               }
             } else if (op.finalHandle) {
               // A stored handle can prove the bytes still exist, but not their current path.
-              const finalFile = await op.finalHandle.getFile();
-              const finalHash = await hashBlobFull(finalFile, controller.signal);
-              observation.dest =
-                finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
-              observation.destSame = false;
+              // If the handle's file is gone, the destination is absent (not unreadable).
+              let finalFile: File | null = null;
+              try {
+                finalFile = await op.finalHandle.getFile();
+              } catch (error) {
+                if ((error as DOMException).name !== "NotFoundError") throw error;
+              }
+              if (!finalFile) {
+                observation.dest = destinationPathKnown ? "absent" : "unreadable";
+              } else {
+                const finalHash = await hashBlobFull(finalFile, controller.signal);
+                observation.dest =
+                  finalHash === (op.finalSha256 ?? op.sourceSha256) ? "match" : "differs";
+                observation.destSame = false;
+              }
             } else {
               observation.dest = destinationPathKnown ? "absent" : "unreadable";
             }
