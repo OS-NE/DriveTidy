@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrangeOps, createInspector, outcomeTone, summarize } from "@/lib/inspect";
+import { arrangeOps, createInspector, outcomeTone, reviewCsv, summarize } from "@/lib/inspect";
 import { Sha256 } from "@/lib/sha256";
 import type { OpRecord } from "@/lib/journal";
 
@@ -244,5 +244,48 @@ describe("arranging operations for review", () => {
   it("leaves the journal order alone before anything is inspected", () => {
     expect(arrangeOps(ops, {}).map((o) => o.id)).toEqual(["a", "b", "c", "d"]);
     expect(arrangeOps(ops, {}, "bad")).toEqual([]);
+  });
+});
+
+describe("review CSV export", () => {
+  const rows = {
+    a: {
+      observation: { access: "ok", source: "absent", dest: "match", destSame: true },
+      result: { outcome: "completed", label: "Moved", actions: [] },
+    },
+    b: {
+      observation: { access: "ok", source: "match", dest: "absent" },
+      result: { outcome: "needs-review", label: "File missing", actions: ["Re-plan", "Resume"] },
+    },
+  } as never;
+
+  it("writes a header and one escaped row per operation", () => {
+    const ops = [
+      op(enc("a"), { id: "a", fromName: 'say "hi", ok.txt' }),
+      op(enc("b"), { id: "b" }),
+    ];
+    const lines = reviewCsv(ops, rows).replace("\uFEFF", "").split("\r\n");
+    expect(lines.length).toBe(3);
+    expect(lines[0]).toBe(
+      "Group,Result,Original location,Destination,Journal step,Original,Destination status,Suggested next step",
+    );
+    expect(lines[1]).toBe(
+      'verified complete,Moved,"old/sub/say ""hi"", ok.txt",new/a.txt,native-moved,not found,matches,',
+    );
+    expect(lines[2]).toBe(
+      "needs review,File missing,old/sub/a.txt,new/a.txt,native-moved,matches,not found,Re-plan · Resume",
+    );
+  });
+
+  it("neutralises spreadsheet formulas coming from file names", () => {
+    const csv = reviewCsv([op(enc("a"), { id: "a", fromDir: "=cmd", fromName: "a.txt" })], rows);
+    expect(csv.includes("'=cmd/a.txt")).toBe(true);
+    const lonely = reviewCsv([op(enc("a"), { id: "a", toPath: "@x", finalName: "=1" })], rows);
+    expect(lonely.includes("'@x/=1")).toBe(true);
+  });
+
+  it("marks operations that were not inspected", () => {
+    const csv = reviewCsv([op(enc("z"), { id: "z" })], {});
+    expect(csv.split("\r\n")[1]!.startsWith("not inspected,")).toBe(true);
   });
 });

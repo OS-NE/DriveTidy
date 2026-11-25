@@ -193,6 +193,20 @@ const TONES: Record<Outcome, Tone> = {
   "waiting-for-access": "bad",
 };
 
+export const TONE_LABEL: Record<Tone, string> = {
+  good: "verified complete",
+  info: "safe, not finished",
+  warn: "needs a decision",
+  bad: "needs review",
+};
+
+export const PRESENCE_TEXT: Record<Observation["source"], string> = {
+  absent: "not found",
+  match: "matches",
+  differs: "changed",
+  unreadable: "can't read",
+};
+
 export const outcomeTone = (outcome: Outcome): Tone => TONES[outcome] ?? "bad";
 
 export interface InspectionSummary {
@@ -247,4 +261,40 @@ export function arrangeOps(
     .map((op, index) => ({ op, index, rank: rank(op) }))
     .sort((a, b) => a.rank - b.rank || a.index - b.index)
     .map((entry) => entry.op);
+}
+
+// A cell that starts with = + - @ (or a tab/CR) is read as a formula by spreadsheet apps, and file
+// names are untrusted, so such cells get a leading apostrophe.
+function csvCell(value: string): string {
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+/** CSV of the given operations and their inspection results, in the order given. */
+export function reviewCsv(ops: OpRecord[], rows: Record<string, InspectedOp>): string {
+  const header = [
+    "Group",
+    "Result",
+    "Original location",
+    "Destination",
+    "Journal step",
+    "Original",
+    "Destination status",
+    "Suggested next step",
+  ];
+  const lines = ops.map((op) => {
+    const row = rows[op.id];
+    return [
+      row ? TONE_LABEL[outcomeTone(row.result.outcome)] : "not inspected",
+      row?.result.label ?? "",
+      `${op.fromDir}/${op.fromName}`,
+      `${op.toPath ?? op.toDir}/${op.finalName ?? op.intendedName}`,
+      op.state,
+      row ? PRESENCE_TEXT[row.observation.source] : "",
+      row ? PRESENCE_TEXT[row.observation.dest] : "",
+      row?.result.actions.join(" · ") ?? "",
+    ];
+  });
+  // Leading BOM so Excel reads the file as UTF-8.
+  return "\uFEFF" + [header, ...lines].map((cells) => cells.map(csvCell).join(",")).join("\r\n");
 }
