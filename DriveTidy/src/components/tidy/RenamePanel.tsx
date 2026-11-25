@@ -12,6 +12,8 @@ import {
   categoryOf,
   extOf,
   isPoorlyNamed,
+  isRenameableMedia,
+  dateBasedName,
   slugify,
   shouldAutoRename,
   nextRenameBatch,
@@ -50,6 +52,7 @@ export function RenamePanel({ files, onChanged }: { files: ScannedFile[]; onChan
   const [running, setRunning] = useState<[number, number] | null>(null);
   const [page, setPage] = useState(0);
   const [batchSize, setBatchSize] = useState<number>(RENAME_BATCH_SIZE);
+  const [namingBasis, setNamingBasis] = useState<"ai" | "date">("ai");
   const [batchSummary, setBatchSummary] = useState<BatchUsage | null>(null);
   const settings = useProviderSettings();
   const providerStatus = settings.statuses["ollama"];
@@ -61,8 +64,7 @@ export function RenamePanel({ files, onChanged }: { files: ScannedFile[]; onChan
   const candidates = useMemo(
     () =>
       files.filter(
-        (f) =>
-          ["Images", "Videos"].includes(categoryOf(f.name)) && (!onlyPoor || isPoorlyNamed(f.name)),
+        (f) => isRenameableMedia(f.name) && f.size > 0 && (!onlyPoor || isPoorlyNamed(f.name)),
       ),
     [files, onlyPoor],
   );
@@ -133,6 +135,26 @@ export function RenamePanel({ files, onChanged }: { files: ScannedFile[]; onChan
       let requested = false;
       let counted = false;
       try {
+        if (namingBasis === "date") {
+          const name = dateBasedName(it.f.lastModified);
+          const next: Item = {
+            ...it,
+            status: "review",
+            name,
+            description: "Named from file date & time",
+            confidence: 1,
+          };
+          if (auto) {
+            try {
+              await rename(next, name);
+              autoCount++;
+            } catch (e) {
+              update(it.f.id, { ...next, status: "error", error: String(e) });
+            }
+          } else update(it.f.id, next);
+          setRunning([i + 1, batch.length]);
+          continue;
+        }
         const dataUrl = await thumbnailDataUrl(it.f);
         requested = true;
         const kind = categoryOf(it.f.name) === "Videos" ? ("video" as const) : ("image" as const);
@@ -248,6 +270,22 @@ export function RenamePanel({ files, onChanged }: { files: ScannedFile[]; onChan
                   {n}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        </span>
+        <span className="flex items-center gap-2 text-sm">
+          <span id="naming-basis-label">Rename basis</span>
+          <Select
+            value={namingBasis}
+            onValueChange={(v) => setNamingBasis(v as "ai" | "date")}
+            disabled={!!running}
+          >
+            <SelectTrigger aria-labelledby="naming-basis-label" className="w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ai">AI content description</SelectItem>
+              <SelectItem value="date">File date &amp; time (no AI)</SelectItem>
             </SelectContent>
           </Select>
         </span>
@@ -449,8 +487,8 @@ export function RenamePanel({ files, onChanged }: { files: ScannedFile[]; onChan
       </div>
       {!items.length && (
         <p className="py-10 text-center text-muted-foreground">
-          {candidates.length} photos & videos match. Local AI looks at each one in batches of{" "}
-          {batchSize} and suggests a descriptive name — continue until all are done.
+          {candidates.length} photos & videos match. Rename by AI content description or by file
+          date &amp; time, in batches of {batchSize} — continue until all are done.
         </p>
       )}
     </div>
