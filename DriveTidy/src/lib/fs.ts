@@ -43,7 +43,9 @@ const DRIVE_ROOT_SCAN_CONFIRMATION =
 // instead of throwing "File picker already active".
 let activePicker: Promise<FileSystemDirectoryHandle> | null = null;
 
-export async function pickDirectory(mode: "readwrite" | "read" = "readwrite"): Promise<FileSystemDirectoryHandle> {
+export async function pickDirectory(
+  mode: "readwrite" | "read" = "readwrite",
+): Promise<FileSystemDirectoryHandle> {
   if (fsEmbedded()) {
     throw new Error("Open DriveTidy in a new tab to choose a drive or folder.");
   }
@@ -373,8 +375,11 @@ export async function moveFile(
   signal?.throwIfAborted();
   const same = (await dest.isSameEntry(f.parent)) && newName === f.name;
   if (same) return newName;
-  if (failOnConflict && await exists(dest, newName)) {
-    throw new TransferError("conflict", `Destination ${newName} already exists; original left untouched.`);
+  if (failOnConflict && (await exists(dest, newName))) {
+    throw new TransferError(
+      "conflict",
+      `Destination ${newName} already exists; original left untouched.`,
+    );
   }
   const finalName = failOnConflict ? newName : await freeName(dest, newName);
   const mover = f.handle as FileSystemFileHandle & {
@@ -400,8 +405,11 @@ export async function moveFile(
   const src = await f.handle.getFile();
   // A second guard narrows the race window for restore operations. The File System Access
   // API has no portable atomic "create only if absent", so this cannot eliminate all races.
-  if (failOnConflict && await exists(dest, finalName)) {
-    throw new TransferError("conflict", `Destination ${finalName} became occupied; original left untouched.`);
+  if (failOnConflict && (await exists(dest, finalName))) {
+    throw new TransferError(
+      "conflict",
+      `Destination ${finalName} became occupied; original left untouched.`,
+    );
   }
   const out = await dest.getFileHandle(finalName, { create: true });
   const cleanup = async () => {
