@@ -1,4 +1,10 @@
-import { openJournal, type BatchKind, type BatchRecord, type Journal, type OpRecord } from "@/lib/journal";
+import {
+  openJournal,
+  type BatchKind,
+  type BatchRecord,
+  type Journal,
+  type OpRecord,
+} from "@/lib/journal";
 import { hashBlobFull } from "@/lib/sha256";
 import type { ScannedFile } from "@/lib/fs";
 
@@ -19,16 +25,27 @@ export async function beginJournalRun(
   const rootId = `root:${root.name}`;
   const now = Date.now();
   const batch: BatchRecord = {
-    id: crypto.randomUUID(), kind, rootId, title, createdAt: now, updatedAt: now,
-    status: "running", visibility: "active", irreversible,
-    durability: journal.durability, counts: { planned: 0, completed: 0, failed: 0 }, schema: 1,
+    id: crypto.randomUUID(),
+    kind,
+    rootId,
+    title,
+    createdAt: now,
+    updatedAt: now,
+    status: "running",
+    visibility: "active",
+    irreversible,
+    durability: journal.durability,
+    counts: { planned: 0, completed: 0, failed: 0 },
+    schema: 1,
   };
   try {
     await journal.putRoot({ id: rootId, handle: root, name: root.name, firstSeen: now });
     await journal.putBatch(batch);
   } catch (error) {
     journal.close();
-    throw new Error(`DriveTidy could not safely start this operation because its recovery journal could not be written: ${String(error)}`);
+    throw new Error(
+      `DriveTidy could not safely start this operation because its recovery journal could not be written: ${String(error)}`,
+    );
   }
   return { journal, batch, close: () => journal.close() };
 }
@@ -50,13 +67,27 @@ export async function journaledMove(
   const id = crypto.randomUUID();
   const now = Date.now();
   const op: OpRecord = {
-    id, txId: crypto.randomUUID(), batchId: run.batch.id, seq: Number(run.batch.counts.completed ?? 0) + Number(run.batch.counts.failed ?? 0),
-    action: intendedName !== file.name && toPath === (file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "") ? "rename" : "move",
+    id,
+    txId: crypto.randomUUID(),
+    batchId: run.batch.id,
+    seq: Number(run.batch.counts.completed ?? 0) + Number(run.batch.counts.failed ?? 0),
+    action:
+      intendedName !== file.name &&
+      toPath === (file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "")
+        ? "rename"
+        : "move",
     fromDir: file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "",
-    fromName: file.name, toDir: destination.name, toPath, intendedName, size: original.size,
-    lastModified: original.lastModified, sourceSha256, sourceHandle: file.handle,
+    fromName: file.name,
+    toDir: destination.name,
+    ...(toPath === undefined ? {} : { toPath }),
+    intendedName,
+    size: original.size,
+    lastModified: original.lastModified,
+    sourceSha256,
+    sourceHandle: file.handle,
     identity: { source: "handle", staging: "unconfirmed", final: "unconfirmed" },
-    state: "hashed", updatedAt: now,
+    state: "hashed",
+    updatedAt: now,
   };
   await run.journal.putOp(op); // If this fails, the file is not touched.
   const finalName = await move(file, destination, intendedName);
@@ -64,12 +95,26 @@ export async function journaledMove(
   const finalFile = await finalHandle.getFile();
   const finalSha256 = await hashBlobFull(finalFile);
   if (finalSha256 !== sourceSha256) {
-    await run.journal.putOp({ ...op, state: "needs-review", finalHandle, finalSha256, error: "Destination hash differs from the journaled source hash", updatedAt: Date.now() });
-    throw new Error(`Move verification failed for ${file.name}; the journal recorded the mismatch for recovery review.`);
+    await run.journal.putOp({
+      ...op,
+      state: "needs-review",
+      finalHandle,
+      finalSha256,
+      error: "Destination hash differs from the journaled source hash",
+      updatedAt: Date.now(),
+    });
+    throw new Error(
+      `Move verification failed for ${file.name}; the journal recorded the mismatch for recovery review.`,
+    );
   }
   await run.journal.putOp({
-    ...op, state: "native-moved", finalName, finalHandle, finalSha256,
-    identity: { source: "handle", staging: "unconfirmed", final: "handle" }, updatedAt: Date.now(),
+    ...op,
+    state: "native-moved",
+    finalName,
+    finalHandle,
+    finalSha256,
+    identity: { source: "handle", staging: "unconfirmed", final: "handle" },
+    updatedAt: Date.now(),
   });
   run.batch = {
     ...run.batch,
@@ -80,9 +125,15 @@ export async function journaledMove(
   return finalName;
 }
 
-export async function finishJournalRun(run: JournalRun, status: "completed" | "completed-with-issues" | "stopped" = "completed", failed = 0) {
+export async function finishJournalRun(
+  run: JournalRun,
+  status: "completed" | "completed-with-issues" | "stopped" = "completed",
+  failed = 0,
+) {
   run.batch = {
-    ...run.batch, status, updatedAt: Date.now(),
+    ...run.batch,
+    status,
+    updatedAt: Date.now(),
     counts: { ...run.batch.counts, failed: Number(run.batch.counts.failed ?? 0) + failed },
   };
   await run.journal.putBatch(run.batch);
