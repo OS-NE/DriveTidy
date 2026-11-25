@@ -22,16 +22,18 @@ function assertPortAvailable(port) {
     const probe = net.createServer();
     probe.once("error", (error) => {
       if (error.code === "EADDRINUSE") {
-        reject(new Error(
-          `DriveTidy cannot start because its local port ${port} is already in use. ` +
-          "Close the other application using this port and try again."
-        ));
+        reject(
+          new Error(
+            `DriveTidy cannot start because its local port ${port} is already in use. ` +
+              "Close the other application using this port and try again.",
+          ),
+        );
       } else {
         reject(error);
       }
     });
     probe.listen(port, HOST, () => {
-      probe.close((error) => error ? reject(error) : resolve());
+      probe.close((error) => (error ? reject(error) : resolve()));
     });
   });
 }
@@ -54,7 +56,9 @@ async function waitForServer() {
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error(`DriveTidy's private local server did not become ready: ${lastError || "timeout"}`);
+  throw new Error(
+    `DriveTidy's private local server did not become ready: ${lastError || "timeout"}`,
+  );
 }
 
 async function startLocalServer() {
@@ -121,7 +125,9 @@ async function createMainWindow() {
     if (targetOrigin !== appOrigin) event.preventDefault();
   });
   await mainWindow.loadURL(`${appOrigin}/`);
-  mainWindow.on("closed", () => { mainWindow = null; });
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+  });
 }
 
 const hasLock = app.requestSingleInstanceLock();
