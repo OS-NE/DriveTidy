@@ -6,10 +6,12 @@ import { getOllamaConfig, saveOllamaConfig, OLLAMA_DEFAULTS } from "@/lib/ollama
 export function OllamaSetup({ onSaved }: { onSaved: () => void }) {
   const [url, setUrl] = useState(OLLAMA_DEFAULTS.url);
   const [model, setModel] = useState(OLLAMA_DEFAULTS.model);
+  const [visionModel, setVisionModel] = useState(OLLAMA_DEFAULTS.visionModel);
   useEffect(() => {
     const c = getOllamaConfig();
     setUrl(c.url);
     setModel(c.model);
+    setVisionModel(c.visionModel);
   }, []);
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   return (
@@ -18,7 +20,8 @@ export function OllamaSetup({ onSaved }: { onSaved: () => void }) {
       <ol className="mt-2 list-decimal space-y-1 pl-4">
         <li>Install Ollama from ollama.com.</li>
         <li>
-          Run <code className="font-mono">ollama pull {model}</code>
+          Run <code className="font-mono">ollama pull {model}</code> and{" "}
+          <code className="font-mono">ollama pull {visionModel}</code>
         </li>
         <li>
           Allow this app to talk to it: set the environment variable{" "}
@@ -33,8 +36,12 @@ export function OllamaSetup({ onSaved }: { onSaved: () => void }) {
           <Input value={url} onChange={(e) => setUrl(e.target.value)} />
         </label>
         <label className="space-y-1">
-          <span>Vision model</span>
+          <span>Text model (folder suggestions)</span>
           <Input value={model} onChange={(e) => setModel(e.target.value)} />
+        </label>
+        <label className="space-y-1">
+          <span>Vision model (photo &amp; video renaming)</span>
+          <Input value={visionModel} onChange={(e) => setVisionModel(e.target.value)} />
         </label>
       </div>
       <Button
@@ -45,6 +52,7 @@ export function OllamaSetup({ onSaved }: { onSaved: () => void }) {
           saveOllamaConfig({
             url: url.trim() || OLLAMA_DEFAULTS.url,
             model: model.trim() || OLLAMA_DEFAULTS.model,
+            visionModel: visionModel.trim() || OLLAMA_DEFAULTS.visionModel,
           });
           onSaved();
         }}

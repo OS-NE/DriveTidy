@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkOllama, nameWithOllama } from "@/lib/ollama";
+import {
+  checkOllama,
+  getOllamaConfig,
+  nameWithOllama,
+  saveOllamaConfig,
+  suggestFoldersWithOllama,
+} from "@/lib/ollama";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 const input = {
   dataUrl: "data:image/jpeg;base64,AA==",
@@ -16,10 +23,47 @@ describe("Local Ollama provider", () => {
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ models: [{ name: "llava:latest" }] }))),
     );
-    expect(await checkOllama()).toMatchObject({
-      state: "missing",
-      message: expect.stringContaining("ollama pull llama3.2-vision"),
-    });
+    const status = await checkOllama();
+    expect(status).toMatchObject({ state: "missing" });
+    expect(status.message).toContain("ollama pull llama3.2");
+    expect(status.message).toContain("ollama pull llama3.2-vision");
+  });
+  it("uses the text model for folder suggestions and the vision model for renaming", async () => {
+    saveOllamaConfig({ url: "http://localhost:11434", model: "mistral", visionModel: "llava" });
+    expect(getOllamaConfig()).toMatchObject({ model: "mistral", visionModel: "llava" });
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message: { content: '{"name":"red-car","description":"car","confidence":0.9}' },
+          }),
+        ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    await nameWithOllama(input);
+    let body = JSON.parse(
+      (fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string,
+    );
+    expect(body.model).toBe("llava");
+    await suggestFoldersWithOllama([
+      {
+        name: "a.jpg",
+        extension: "jpg",
+        category: "Images",
+        currentFolder: "root",
+        modified: "2024",
+        size: 1,
+      },
+    ]).catch(() => undefined);
+    body = JSON.parse((fetch.mock.calls[1] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.model).toBe("mistral");
+  });
+  it("keeps a single saved model working for both roles (backward compatible)", () => {
+    localStorage.setItem(
+      "drivetidy.ollama",
+      JSON.stringify({ url: "http://x", model: "qwen2.5vl" }),
+    );
+    expect(getOllamaConfig()).toMatchObject({ model: "qwen2.5vl", visionModel: "qwen2.5vl" });
   });
   it("names a file locally and sends only base64 image data", async () => {
     const fetch = vi.fn(

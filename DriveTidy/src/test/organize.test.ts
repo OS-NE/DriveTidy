@@ -11,6 +11,8 @@ import {
   customTargetFolder,
   safeRelativeFolder,
   recommendStructure,
+  isRenameableMedia,
+  dateBasedName,
 } from "@/lib/organize";
 
 describe("organize rules", () => {
@@ -49,6 +51,22 @@ describe("organize rules", () => {
   it("detects camera-default names", () => {
     expect(isPoorlyNamed("IMG_2034.jpg")).toBe(true);
     expect(isPoorlyNamed("beach-sunset-goa.jpg")).toBe(false);
+  });
+  it("treats files with no real name as poorly named", () => {
+    expect(isPoorlyNamed(".jpg")).toBe(true);
+    expect(isPoorlyNamed("   .png")).toBe(true);
+  });
+  it("limits rename candidates to classic photos and videos (no GIF/SVG)", () => {
+    expect(isRenameableMedia("photo.jpg")).toBe(true);
+    expect(isRenameableMedia("clip.mp4")).toBe(true);
+    expect(isRenameableMedia("anim.gif")).toBe(false);
+    expect(isRenameableMedia("icon.svg")).toBe(false);
+    expect(isRenameableMedia("notes.txt")).toBe(false);
+  });
+  it("builds a date & time based name from file metadata", () => {
+    const t = new Date(2024, 4, 15, 9, 5, 3).getTime();
+    expect(dateBasedName(t)).toBe("2024-05-15_09-05-03");
+    expect(dateBasedName(0)).toBe("undated");
   });
   it("avoids name collisions", () => {
     expect(uniqueName("a.jpg", new Set(["a.jpg", "a-2.jpg"]))).toBe("a-3.jpg");
