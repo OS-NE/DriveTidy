@@ -159,7 +159,11 @@ describe("cross-root duplicate comparison", () => {
     external.files.set("same-size-different.txt", new Uint8Array(Buffer.from("different bytes")));
     const primaryCopy = scanned(primary, "original.txt", "Primary/original.txt");
     const renamedCopy = scanned(external, "renamed-copy.txt", "Secondary/renamed-copy.txt");
-    const sameSizeDifferent = scanned(external, "same-size-different.txt", "Secondary/same-size-different.txt");
+    const sameSizeDifferent = scanned(
+      external,
+      "same-size-different.txt",
+      "Secondary/same-size-different.txt",
+    );
 
     const groups = await findDuplicates([primaryCopy, renamedCopy, sameSizeDifferent], () => {});
 
