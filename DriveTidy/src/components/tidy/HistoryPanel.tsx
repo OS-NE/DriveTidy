@@ -15,9 +15,12 @@ import { restoreQuarantinedBatch } from "@/lib/restore";
 import { ResultsPager, RESULTS_PAGE_SIZE } from "./ResultsPager";
 import type { Observation, Classification } from "@/lib/recovery";
 import {
+  PRESENCE_TEXT,
+  TONE_LABEL,
   arrangeOps,
   createInspector,
   outcomeTone,
+  reviewCsv,
   summarize,
   type InspectionSummary,
   type Tone,
@@ -72,18 +75,6 @@ const TONE_BAR: Record<Tone, string> = {
   info: "bg-sky-500",
   warn: "bg-amber-500",
   bad: "bg-destructive",
-};
-const TONE_LABEL: Record<Tone, string> = {
-  good: "verified complete",
-  info: "safe, not finished",
-  warn: "needs a decision",
-  bad: "needs review",
-};
-const PRESENCE_TEXT: Record<Observation["source"], string> = {
-  absent: "not found",
-  match: "matches",
-  differs: "changed",
-  unreadable: "can't read",
 };
 
 function SummaryStrip({ summary }: { summary: InspectionSummary }) {
@@ -399,6 +390,18 @@ export function HistoryPanel() {
     }
   };
 
+  const exportReview = (batch: BatchRecord) => {
+    const csv = reviewCsv(arrangedOps, recoveryRows);
+    const slug = batch.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `drivetidy-review-${slug || "batch"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${arrangedOps.length} rows. No files were changed.`);
+  };
+
   const confirmRecoveredMove = async (batch: BatchRecord, op: OpRecord) => {
     if (!journal) return;
     const review = recoveryRows[op.id];
@@ -705,6 +708,15 @@ export function HistoryPanel() {
                     </Button>
                   );
                 })}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-auto"
+                  disabled={arrangedOps.length === 0}
+                  onClick={() => exportReview(r)}
+                >
+                  Export {arrangedOps.length.toLocaleString()} rows (CSV)
+                </Button>
               </div>
             )}
             {open === r.id && (
