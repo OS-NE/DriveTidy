@@ -71,6 +71,47 @@ export function extOf(name: string): string {
   return i > 0 ? name.slice(i + 1).toLowerCase() : "";
 }
 
+/** Classic photo formats worth renaming (animated GIF and vector SVG are excluded on purpose). */
+export const RENAME_IMAGE_EXTS = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "heic",
+  "heif",
+  "bmp",
+  "tiff",
+  "tif",
+  "raw",
+  "cr2",
+  "cr3",
+  "nef",
+  "arw",
+  "dng",
+  "orf",
+]);
+
+/** Classic video formats worth renaming. */
+export const RENAME_VIDEO_EXTS = new Set([
+  "mp4",
+  "mov",
+  "avi",
+  "mkv",
+  "webm",
+  "m4v",
+  "wmv",
+  "flv",
+  "3gp",
+  "mts",
+  "m2ts",
+]);
+
+/** True for classic image/video files that the AI rename flow may touch. */
+export function isRenameableMedia(name: string): boolean {
+  const e = extOf(name);
+  return RENAME_IMAGE_EXTS.has(e) || RENAME_VIDEO_EXTS.has(e);
+}
+
 export function categoryOf(name: string): Category {
   const e = extOf(name);
   for (const [cat, list] of Object.entries(EXT)) if (list.includes(e)) return cat as Category;
@@ -208,9 +249,10 @@ export function targetFolder(f: PlanInput, strategy: BuiltInStrategy): string {
   }
 }
 
-/** A filename looks "poorly named" when it is a camera/screenshot/random default. */
+/** A filename looks "poorly named" when it is a camera/screenshot/random default, or has no real name at all. */
 export function isPoorlyNamed(name: string): boolean {
-  const base = name.replace(/\.[^.]+$/, "");
+  const base = name.replace(/\.[^.]+$/, "").trim();
+  if (!base) return true; // e.g. ".jpg" — no name at all
   return (
     /^(img|dsc|dscn|dcim|pxl|mvimg|vid|mov|wp|photo|image|video|screenshot|untitled|new|file|download)[-_ ]?\d*/i.test(
       base,
@@ -219,6 +261,14 @@ export function isPoorlyNamed(name: string): boolean {
     /^[a-f0-9-]{16,}$/i.test(base) ||
     base.length <= 2
   );
+}
+
+/** Metadata-based rename target: "2024-05-15_15-30-12" from the file's last-modified date. No AI involved. */
+export function dateBasedName(lastModified: number): string {
+  const d = new Date(lastModified);
+  if (!Number.isFinite(d.getTime()) || lastModified <= 0) return "undated";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
 }
 
 /** Turn an AI suggestion into a safe, clean filename slug. */
