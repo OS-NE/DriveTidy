@@ -75,8 +75,10 @@ jobs:
             echo "| Tests | ${{ steps.tests.outcome }} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Tests are the gate. Type-check, lint and format are reported above but do not block until
-      # the project's current baseline for them is known and clean.
-      - name: Fail if tests failed
-        if: steps.tests.outcome == 'failure'
+      # Every check above runs even if an earlier one failed, so a single run reports everything
+      # that is wrong. This step then fails the job if any of them did.
+      - name: Fail if any check failed
+        if: >-
+          steps.types.outcome == 'failure' || steps.lint.outcome == 'failure' ||
+          steps.format.outcome == 'failure' || steps.tests.outcome == 'failure'
         run: exit 1
