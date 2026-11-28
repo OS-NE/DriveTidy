@@ -270,28 +270,28 @@ export class Journal {
     for (const value of ops as Array<Record<string, unknown>>) {
       if (
         !value ||
-        typeof value.id !== "string" ||
-        typeof value.batchId !== "string" ||
-        !batchIds.has(value.batchId) ||
-        typeof value.txId !== "string" ||
-        typeof value.fromDir !== "string" ||
-        typeof value.fromName !== "string" ||
-        typeof value.toDir !== "string" ||
-        typeof value.intendedName !== "string" ||
-        typeof value.sourceSha256 !== "string" ||
-        !/^[a-f0-9]{64}$/i.test(value.sourceSha256) ||
-        typeof value.state !== "string" ||
-        typeof value.size !== "number" ||
-        typeof value.lastModified !== "number" ||
-        typeof value.seq !== "number" ||
+        typeof value["id"] !== "string" ||
+        typeof value["batchId"] !== "string" ||
+        !batchIds.has(value["batchId"]) ||
+        typeof value["txId"] !== "string" ||
+        typeof value["fromDir"] !== "string" ||
+        typeof value["fromName"] !== "string" ||
+        typeof value["toDir"] !== "string" ||
+        typeof value["intendedName"] !== "string" ||
+        typeof value["sourceSha256"] !== "string" ||
+        !/^[a-f0-9]{64}$/i.test(value["sourceSha256"]) ||
+        typeof value["state"] !== "string" ||
+        typeof value["size"] !== "number" ||
+        typeof value["lastModified"] !== "number" ||
+        typeof value["seq"] !== "number" ||
         !["move", "rename", "delete", "rmdir", "finalize", "restore"].includes(
-          String(value.action),
+          String(value["action"]),
         ) ||
-        opIds.has(value.id)
+        opIds.has(value["id"])
       ) {
         throw new JournalError("Cannot export history containing invalid operation records.");
       }
-      opIds.add(value.id);
+      opIds.add(value["id"]);
     }
     const portableDirs = (dirs as Array<DirRecord | null>).filter(
       (d): d is DirRecord => !!d && typeof d.opId === "string" && opIds.has(d.opId),
@@ -299,12 +299,12 @@ export class Journal {
     for (const value of portableDirs as unknown as Array<Record<string, unknown>>) {
       if (
         !value ||
-        typeof value.id !== "string" ||
-        typeof value.opId !== "string" ||
-        !opIds.has(value.opId) ||
-        typeof value.path !== "string" ||
-        !["create-intent", "created", "observed-existing"].includes(String(value.state)) ||
-        typeof value.intentAt !== "number"
+        typeof value["id"] !== "string" ||
+        typeof value["opId"] !== "string" ||
+        !opIds.has(value["opId"]) ||
+        typeof value["path"] !== "string" ||
+        !["create-intent", "created", "observed-existing"].includes(String(value["state"])) ||
+        typeof value["intentAt"] !== "number"
       ) {
         throw new JournalError("Cannot export history containing invalid directory records.");
       }
@@ -343,58 +343,58 @@ export class Journal {
       throw new JournalError("Backup has an invalid structure");
     const backup = data as Record<string, unknown>;
     if (
-      backup.format !== "drivetidy-journal-backup" ||
-      backup.version !== 1 ||
-      !Array.isArray(backup.roots) ||
-      !Array.isArray(backup.batches) ||
-      !Array.isArray(backup.ops) ||
-      !Array.isArray(backup.dirs)
+      backup["format"] !== "drivetidy-journal-backup" ||
+      backup["version"] !== 1 ||
+      !Array.isArray(backup["roots"]) ||
+      !Array.isArray(backup["batches"]) ||
+      !Array.isArray(backup["ops"]) ||
+      !Array.isArray(backup["dirs"])
     ) {
       throw new JournalError("Unsupported or malformed DriveTidy backup");
     }
     if (
-      backup.roots.length > 10000 ||
-      backup.batches.length > 100000 ||
-      backup.ops.length > 500000 ||
-      backup.dirs.length > 100000
+      backup["roots"].length > 10000 ||
+      backup["batches"].length > 100000 ||
+      backup["ops"].length > 500000 ||
+      backup["dirs"].length > 100000
     ) {
       throw new JournalError("Backup contains too many records");
     }
 
-    const roots = backup.roots as Array<Record<string, unknown>>;
+    const roots = backup["roots"] as Array<Record<string, unknown>>;
     const rootMap = new Map<string, string>();
     const importedRoots: RootRecord[] = [];
     for (const raw of roots) {
       if (
         !raw ||
-        typeof raw.id !== "string" ||
-        typeof raw.name !== "string" ||
-        typeof raw.firstSeen !== "number" ||
-        rootMap.has(raw.id)
+        typeof raw["id"] !== "string" ||
+        typeof raw["name"] !== "string" ||
+        typeof raw["firstSeen"] !== "number" ||
+        rootMap.has(raw["id"])
       ) {
         throw new JournalError("Backup contains an invalid or duplicate root record");
       }
       const id = `import:${crypto.randomUUID()}`;
-      rootMap.set(raw.id, id);
-      importedRoots.push({ id, name: raw.name, firstSeen: raw.firstSeen });
+      rootMap.set(raw["id"], id);
+      importedRoots.push({ id, name: raw["name"], firstSeen: raw["firstSeen"] });
     }
 
-    const batches = backup.batches as Array<Record<string, unknown>>;
+    const batches = backup["batches"] as Array<Record<string, unknown>>;
     const batchMap = new Map<string, string>();
     const importedBatches: BatchRecord[] = [];
     for (const raw of batches) {
       const validated = validateBatch(raw);
       if (
         "unreadable" in validated ||
-        typeof raw.id !== "string" ||
-        typeof raw.rootId !== "string" ||
-        !rootMap.has(raw.rootId) ||
-        typeof raw.title !== "string" ||
-        typeof raw.createdAt !== "number" ||
-        typeof raw.updatedAt !== "number" ||
-        typeof raw.irreversible !== "boolean" ||
-        !raw.counts ||
-        typeof raw.counts !== "object" ||
+        typeof raw["id"] !== "string" ||
+        typeof raw["rootId"] !== "string" ||
+        !rootMap.has(raw["rootId"]) ||
+        typeof raw["title"] !== "string" ||
+        typeof raw["createdAt"] !== "number" ||
+        typeof raw["updatedAt"] !== "number" ||
+        typeof raw["irreversible"] !== "boolean" ||
+        !raw["counts"] ||
+        typeof raw["counts"] !== "object" ||
         ![
           "restructure",
           "rename",
@@ -403,7 +403,7 @@ export class Journal {
           "delete",
           "empty-folders",
           "undo",
-        ].includes(String(raw.kind)) ||
+        ].includes(String(raw["kind"])) ||
         ![
           "running",
           "stopped",
@@ -412,18 +412,18 @@ export class Journal {
           "completed-with-issues",
           "resolved",
           "undone",
-        ].includes(String(raw.status)) ||
-        !["strict", "relaxed"].includes(String(raw.durability))
+        ].includes(String(raw["status"])) ||
+        !["strict", "relaxed"].includes(String(raw["durability"]))
       ) {
         throw new JournalError("Backup contains an invalid batch or an unknown root reference");
       }
-      if (batchMap.has(raw.id)) throw new JournalError("Backup contains duplicate batch IDs");
+      if (batchMap.has(raw["id"])) throw new JournalError("Backup contains duplicate batch IDs");
       const id = `import:${crypto.randomUUID()}`;
-      batchMap.set(raw.id, id);
+      batchMap.set(raw["id"], id);
       importedBatches.push({
         ...validated,
         id,
-        rootId: rootMap.get(raw.rootId)!,
+        rootId: rootMap.get(raw["rootId"])!,
         status: isUnfinished(validated) ? "interrupted" : validated.status,
         visibility: "archived",
         importedAt: Date.now(),
@@ -433,35 +433,35 @@ export class Journal {
     const importedOps: OpRecord[] = [];
     const opMap = new Map<string, string>();
     const seenOps = new Set<string>();
-    for (const value of backup.ops) {
+    for (const value of backup["ops"]) {
       if (!value || typeof value !== "object")
         throw new JournalError("Backup contains an invalid operation");
       const raw = value as Record<string, unknown>;
       if (
-        typeof raw.id !== "string" ||
-        typeof raw.batchId !== "string" ||
-        typeof raw.txId !== "string" ||
-        !batchMap.has(raw.batchId) ||
-        typeof raw.fromDir !== "string" ||
-        typeof raw.fromName !== "string" ||
-        typeof raw.toDir !== "string" ||
-        typeof raw.intendedName !== "string" ||
-        typeof raw.sourceSha256 !== "string" ||
-        !/^[a-f0-9]{64}$/i.test(raw.sourceSha256) ||
-        typeof raw.state !== "string" ||
-        typeof raw.size !== "number" ||
-        typeof raw.lastModified !== "number" ||
-        typeof raw.seq !== "number" ||
+        typeof raw["id"] !== "string" ||
+        typeof raw["batchId"] !== "string" ||
+        typeof raw["txId"] !== "string" ||
+        !batchMap.has(raw["batchId"]) ||
+        typeof raw["fromDir"] !== "string" ||
+        typeof raw["fromName"] !== "string" ||
+        typeof raw["toDir"] !== "string" ||
+        typeof raw["intendedName"] !== "string" ||
+        typeof raw["sourceSha256"] !== "string" ||
+        !/^[a-f0-9]{64}$/i.test(raw["sourceSha256"]) ||
+        typeof raw["state"] !== "string" ||
+        typeof raw["size"] !== "number" ||
+        typeof raw["lastModified"] !== "number" ||
+        typeof raw["seq"] !== "number" ||
         !["move", "rename", "delete", "rmdir", "finalize", "restore"].includes(
-          String(raw.action),
+          String(raw["action"]),
         ) ||
-        seenOps.has(raw.id)
+        seenOps.has(raw["id"])
       ) {
         throw new JournalError("Backup contains an invalid or duplicate operation record");
       }
-      seenOps.add(raw.id);
+      seenOps.add(raw["id"]);
       const importedId = `import:${crypto.randomUUID()}`;
-      opMap.set(raw.id, importedId);
+      opMap.set(raw["id"], importedId);
       const {
         sourceHandle: _source,
         stagingHandle: _staging,
@@ -471,35 +471,35 @@ export class Journal {
       importedOps.push({
         ...(portable as unknown as OpRecord),
         id: importedId,
-        batchId: batchMap.get(raw.batchId)!,
+        batchId: batchMap.get(raw["batchId"])!,
         txId: `import:${crypto.randomUUID()}`,
         identity: { source: "unconfirmed", staging: "unconfirmed", final: "unconfirmed" },
       });
     }
 
     const importedDirs: DirRecord[] = [];
-    for (const value of backup.dirs) {
+    for (const value of backup["dirs"]) {
       if (!value || typeof value !== "object")
         throw new JournalError("Backup contains an invalid directory record");
       const raw = value as Record<string, unknown>;
       if (
-        typeof raw.id !== "string" ||
-        typeof raw.opId !== "string" ||
-        typeof raw.path !== "string" ||
-        !seenOps.has(raw.opId) ||
-        !["create-intent", "created", "observed-existing"].includes(String(raw.state)) ||
-        typeof raw.intentAt !== "number"
+        typeof raw["id"] !== "string" ||
+        typeof raw["opId"] !== "string" ||
+        typeof raw["path"] !== "string" ||
+        !seenOps.has(raw["opId"]) ||
+        !["create-intent", "created", "observed-existing"].includes(String(raw["state"])) ||
+        typeof raw["intentAt"] !== "number"
       ) {
         throw new JournalError("Backup contains an invalid directory record");
       }
-      const importedOpId = opMap.get(raw.opId);
+      const importedOpId = opMap.get(raw["opId"]);
       if (!importedOpId) throw new JournalError("Directory record references an unknown operation");
       importedDirs.push({
         id: `import:${crypto.randomUUID()}`,
         opId: importedOpId,
-        path: raw.path,
-        state: raw.state as DirRecord["state"],
-        intentAt: raw.intentAt,
+        path: raw["path"],
+        state: raw["state"] as DirRecord["state"],
+        intentAt: raw["intentAt"],
       });
     }
 

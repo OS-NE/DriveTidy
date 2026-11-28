@@ -48,7 +48,7 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     const url = new URL(request.url);
     if (url.pathname === "/__drivetidy_health") {
-      const expected = process.env.DRIVETIDY_HEALTH_TOKEN;
+      const expected = process.env["DRIVETIDY_HEALTH_TOKEN"];
       const supplied = request.headers.get("x-drivetidy-health-token");
       if (expected && supplied === expected) {
         return new Response(null, {

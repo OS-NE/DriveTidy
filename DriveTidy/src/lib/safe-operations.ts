@@ -70,7 +70,7 @@ export async function journaledMove(
     id,
     txId: crypto.randomUUID(),
     batchId: run.batch.id,
-    seq: Number(run.batch.counts.completed ?? 0) + Number(run.batch.counts.failed ?? 0),
+    seq: Number(run.batch.counts["completed"] ?? 0) + Number(run.batch.counts["failed"] ?? 0),
     action:
       intendedName !== file.name &&
       toPath === (file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "")
@@ -119,7 +119,7 @@ export async function journaledMove(
   run.batch = {
     ...run.batch,
     updatedAt: Date.now(),
-    counts: { ...run.batch.counts, completed: Number(run.batch.counts.completed ?? 0) + 1 },
+    counts: { ...run.batch.counts, completed: Number(run.batch.counts["completed"] ?? 0) + 1 },
   };
   await run.journal.putBatch(run.batch);
   return finalName;
@@ -134,7 +134,7 @@ export async function finishJournalRun(
     ...run.batch,
     status,
     updatedAt: Date.now(),
-    counts: { ...run.batch.counts, failed: Number(run.batch.counts.failed ?? 0) + failed },
+    counts: { ...run.batch.counts, failed: Number(run.batch.counts["failed"] ?? 0) + failed },
   };
   await run.journal.putBatch(run.batch);
   run.close();
