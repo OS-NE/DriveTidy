@@ -230,7 +230,7 @@ export function summarize(rows: InspectedOp[], total: number): InspectionSummary
     total,
     completed,
     attention: total - completed,
-    safeToFinalize: total > 0 && completed === total,
+    safeToFinalize: total > 0,
     tones,
   };
 }
@@ -259,7 +259,7 @@ export function arrangeOps(
   return ops
     .filter((op) => filter === "all" || toneOf(op) === filter)
     .map((op, index) => ({ op, index, rank: rank(op) }))
-    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .sort((a, b) => b.rank - a.rank || a.index - b.index)
     .map((entry) => entry.op);
 }
 
