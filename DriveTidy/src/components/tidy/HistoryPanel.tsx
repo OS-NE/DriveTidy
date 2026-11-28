@@ -131,9 +131,7 @@ export function HistoryPanel() {
   const [recoveryRows, setRecoveryRows] = useState<
     Record<string, { observation: Observation; result: Classification }>
   >({});
-  const [recoverySummaries, setRecoverySummaries] = useState<Record<string, InspectionSummary>>(
-    {},
-  );
+  const [recoverySummaries, setRecoverySummaries] = useState<Record<string, InspectionSummary>>({});
   const backupInput = useRef<HTMLInputElement>(null);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupMode, setBackupMode] = useState<"encrypt-export" | "encrypted-import" | null>(null);
@@ -380,7 +378,7 @@ export function HistoryPanel() {
         counts: {
           ...batch.counts,
           completed: summary.completed,
-          failed: Number(batch.counts.failed ?? 0),
+          failed: Number(batch.counts["failed"] ?? 0),
         },
       });
       await reload();
@@ -392,7 +390,10 @@ export function HistoryPanel() {
 
   const exportReview = (batch: BatchRecord) => {
     const csv = reviewCsv(arrangedOps, recoveryRows);
-    const slug = batch.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const slug = batch.title
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40);
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;

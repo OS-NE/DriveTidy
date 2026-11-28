@@ -455,19 +455,21 @@ export function RestructurePanel({
               read. Review the plan below; nothing moves until you apply it.
             </p>
           </div>
-          <Badge variant={aiSettings.statuses.ollama?.state === "ready" ? "default" : "secondary"}>
-            {aiSettings.checking.ollama
+          <Badge
+            variant={aiSettings.statuses["ollama"]?.state === "ready" ? "default" : "secondary"}
+          >
+            {aiSettings.checking["ollama"]
               ? "Checking local AI…"
-              : (aiSettings.statuses.ollama?.message ?? "Checking local AI…")}
+              : (aiSettings.statuses["ollama"]?.message ?? "Checking local AI…")}
           </Badge>
           <Button
             variant="secondary"
             onClick={() => void suggestLayout()}
             disabled={
               !!aiProgress ||
-              aiSettings.checking.ollama ||
-              !aiSettings.statuses.ollama ||
-              ["missing", "invalid", "denied"].includes(aiSettings.statuses.ollama.state) ||
+              aiSettings.checking["ollama"] ||
+              !aiSettings.statuses["ollama"] ||
+              ["missing", "invalid", "denied"].includes(aiSettings.statuses["ollama"].state) ||
               !files.length
             }
           >
@@ -499,9 +501,9 @@ export function RestructurePanel({
             still take priority. Review each destination in the plan before applying.
           </p>
         )}
-        {!aiSettings.checking.ollama &&
-          aiSettings.statuses.ollama &&
-          aiSettings.statuses.ollama.state !== "ready" && (
+        {!aiSettings.checking["ollama"] &&
+          aiSettings.statuses["ollama"] &&
+          aiSettings.statuses["ollama"].state !== "ready" && (
             <Button
               variant="link"
               size="sm"
