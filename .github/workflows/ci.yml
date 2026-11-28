@@ -1,0 +1,82 @@
+name: CI
+
+# Fast checks on every pull request, so problems show up before a merge instead of at release time.
+# The Windows installer build stays in windows-installer.yml (tags and manual runs only).
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+
+      - name: Install dependencies
+        working-directory: ./DriveTidy
+        run: bun install --frozen-lockfile
+
+      # Each check runs even if an earlier one failed, so one run reports everything that is wrong.
+      - name: Type-check
+        id: types
+        working-directory: ./DriveTidy
+        continue-on-error: true
+        run: bunx tsc --noEmit
+
+      - name: Lint
+        id: lint
+        working-directory: ./DriveTidy
+        continue-on-error: true
+        run: bun run lint
+
+      - name: Format check
+        id: format
+        working-directory: ./DriveTidy
+        continue-on-error: true
+        run: bunx prettier --check src
+
+      - name: Tests
+        id: tests
+        working-directory: ./DriveTidy
+        continue-on-error: true
+        run: bun run test
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Type-check | ${{ steps.types.outcome }} |"
+            echo "| Lint | ${{ steps.lint.outcome }} |"
+            echo "| Format | ${{ steps.format.outcome }} |"
+            echo "| Tests | ${{ steps.tests.outcome }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Tests are the gate. Type-check, lint and format are reported above but do not block until
+      # the project's current baseline for them is known and clean.
+      - name: Fail if tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
